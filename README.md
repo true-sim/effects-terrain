@@ -112,7 +112,8 @@ Tiles are ordinary instances of pool meshes, so the shadow maps (cascades, atlas
 and ray tracing traces them: `resources.rayTracing(rayTracing)` gives every tile mesh a bottom level of its own (its
 one level: flat meshes), built from the pool's quantized positions in the frames after its mesh arrives, compacted,
 never refitted (terrain is static), and removed with the mesh; the top level holds every tile shown (tested: its
-instance count is the shown tiles'). Traced shadows, global illumination's probes and cascades and the reference path
+instance count is the shown tiles'; under GPU-assisted validation engine 0.194.0's traced masks trace NaN rays from the
+view's edge pixels, a bug there, `docs/pitfalls.md`). Traced shadows, global illumination's probes and cascades and the reference path
 tracer see the terrain as drawn. A bottom level per tile keeps builds small and lets tiles stream; a level's coarser
 tiles replace finer ones in the top level as they do on screen. The cost is memory: over Lauterbrunnen's valley floor
 1,554 tiles show and their bottom levels take 820 MiB (0.45 MiB a tile of 9,216 triangles). Not built: bottom levels
