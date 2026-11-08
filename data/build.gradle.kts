@@ -8,6 +8,7 @@ description = "Terrain data for true-sim: pinned public elevation sources (manif
 
 dependencies {
     api("com.truesim.scene:scene-assets:0.70.0") // the asset types and importers the site loads through
+    api("com.truesim.common:common-math:0.6.1") // math the same on every platform
 }
 
 // Downloads the manifest's tiles into the cache (never committed) and imports them into a site the asset manager
@@ -21,4 +22,9 @@ tasks.register<JavaExec>("fetchTerrain") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass = "com.truesim.effects.terrain.data.FetchTerrain"
     args(terrainManifest.get(), terrainCache.get())
+}
+
+// The file formats' branches are mostly refusals of what the sources never write (other compressions, layouts).
+coverage {
+    minimum = 0.75
 }
