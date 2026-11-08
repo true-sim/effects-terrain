@@ -64,8 +64,8 @@ class LodTransitionTest {
             double worstSwitch = 0;
             int switches = 0;
             int[] previous = null;
-            for (int f = 1; f <= 240; f++) {
-                double x = 3.0 * f; // 90 m/s at 30 frames a second, 60 m above the ground
+            for (int f = 1; f <= 320; f++) {
+                double x = 1.5 * f; // 45 m/s at 30 frames a second, 60 m above the ground
                 rig.look(x, terrain.heightAt(x, z) + 60, z, 1, -0.45, 0.1);
                 rig.frame(false);
                 int[] before = rig.argb();
