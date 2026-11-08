@@ -20,10 +20,11 @@ class TerrainStreamingTest {
         return TerrainGrid.key(level, (int) Math.floor(x / size), (int) Math.floor(z / size));
     }
 
-    @Test
-    void tilesLoadAndUnloadByDistanceWithoutHolesInFlight() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void tilesLoadAndUnloadByDistanceWithoutHolesInFlight(boolean occlusion) throws Exception {
         EngineSettings settings = TerrainSeamsTest.small();
-        try (TestGpu gpu = TestGpu.open(); TerrainRig rig = new TerrainRig(gpu, 96, 64, false, false, settings)) {
+        try (TestGpu gpu = TestGpu.open(); TerrainRig rig = new TerrainRig(gpu, 96, 64, false, false, settings, occlusion)) {
             rig.output();
             Terrain terrain = rig.terrain(TestSites.rugged(900), TerrainSeamsTest.plain().ref());
             TerrainGrid grid = terrain.grid();

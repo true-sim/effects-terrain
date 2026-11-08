@@ -108,6 +108,11 @@ final class TerrainRig implements AutoCloseable {
     }
 
     TerrainRig(TestGpu gpu, int width, int height, boolean visibilityBuffer, boolean hdr, EngineSettings settings) {
+        this(gpu, width, height, visibilityBuffer, hdr, settings, true);
+    }
+
+    TerrainRig(TestGpu gpu, int width, int height, boolean visibilityBuffer, boolean hdr, EngineSettings settings,
+        boolean occlusion) {
         this.gpu = gpu;
         this.device = gpu.device();
         this.width = width;
@@ -132,7 +137,7 @@ final class TerrainRig implements AutoCloseable {
         graph = new FrameGraph(device, slots);
         graph.settings(settings);
         port = graph.addView("main").size(width, height);
-        view = geometry.createView(port, camera, ViewOptions.of(1 << 16, 1 << 23).withOcclusion(true))
+        view = geometry.createView(port, camera, ViewOptions.of(1 << 16, 1 << 23).withOcclusion(occlusion))
             .set(1, MeshletRenderer.MODE_LIT);
         Technique shading = visibilityBuffer
             ? new VisibilityBufferShading(geometry, view, color, VK_FORMAT_D32_SFLOAT).clearColor(CLEAR[0], CLEAR[1],
