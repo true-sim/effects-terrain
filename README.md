@@ -131,12 +131,15 @@ include the test's read-back of the colour (0.28-0.30 ms).
 | 3,500 m, to the horizon | 1,161 (160, 100, 137, 89, 151, 158, 201, 165) | 17,325 | 0.90 ms (IDs 0.15, shading 0.27) | 1.20 ms (meshlets 0.70) |
 | valley floor, the sun ray traced | 1,554, every one in the top level | | 1.46 ms | |
 
-The flight of the films in real time (26 s at 30 frames a second, up to 1,857 tiles shown, at most 20 waiting for
-their mesh at once): GPU 1.14 ms a frame (p99 2.5). The main thread's world update took 5.8 ms a frame (p99 15.6)
-when the interest moved every frame: scene-world's selection over 120 km and 9 levels; the terrain's own update 0.21 ms
-(p99 5.5, the frames holding many new meshes). The interest now follows the camera in steps of
-`terrain.followStep` (16 m). Many level-0 tiles come from the valley's cliffs: their own error keeps them split out to a
-few kilometres (`docs/pitfalls.md`).
+The flight of the films in real time (26 s at 30 frames a second, up to 1,857 tiles shown, at most 22 waiting for
+their mesh at once): GPU 1.16 ms a frame (p99 2.5); the terrain's own update 0.22 ms a frame (p99 5.9, the frames
+holding many new meshes); the scene's and the sync's 0.04 ms. The world's update is the main thread's cost: 5.1 ms a
+frame (p99 12.9) with the interest moving 16 m steps (about every second frame of the flight), 5.8 ms when it moved
+every frame. Alone on the CPU (no GPU, the same bands, about 1,000 cells), one selection of scene-world's
+`World.update` after the interest moved took 3.3 to 6.0 ms, and 0.000 ms with it still: the selection over 9 levels
+and 137 km of bands, scene-world's own cost. The interest follows in steps of `terrain.followStep` (32 m by default),
+so the selection runs a few times a second in flight. Many level-0 tiles come from the valley's cliffs: their own
+error keeps them split out to a few kilometres.
 
 ## Settings
 

@@ -38,7 +38,7 @@ public final class TerrainSettings {
      * How far the camera moves before the terrain's interest follows it, metres: the world selects its cells anew only
      * then (selecting costs the main thread a few milliseconds over a 120 km range).
      */
-    public static final Setting<Float> FOLLOW_STEP = Setting.decimal("terrain.followStep", 16, 0, 10_000,
+    public static final Setting<Float> FOLLOW_STEP = Setting.decimal("terrain.followStep", 32, 0, 10_000,
         "metres the camera moves before the terrain's streaming selects tiles anew");
     /** How many tile meshes start building per frame. */
     public static final Setting<Integer> BUILD_BUDGET = Setting.integer("terrain.buildBudget", 32, 1, 100_000,
