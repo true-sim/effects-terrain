@@ -63,7 +63,7 @@ and grass may grow).
 
 - **A pyramid streamed by the world.** `Terrain` registers a layer of `Levels.grid(terrain.tileSize, terrain.levels)`
   cells (128 m to 32 km by default) with the scene's `World` and follows the camera with an interest source
-  (`follow`). Its profile's bands are where each level's measured error ({@link `TerrainError`}: the largest distance
+  (`follow`). Its profile's bands are where each level's measured error (`TerrainError`: the largest distance
   along the normal between a tile's triangles and the next finer surface, the median over sample tiles of the level)
   projects to `terrain.screenError` pixels: the world requests and releases cells by distance, coarse first, out to
   `terrain.range`.
