@@ -82,7 +82,9 @@ and grass may grow).
 - **Crack-free seams.** Every tile hangs double-sided skirts from its four edges, as deep as the widest gap its edges
   can have against a tile up to two levels finer or coarser (sampled at the finer spacing), plus `terrain.skirtMargin`
   and the meshes' 16-bit height quantization. With them no background shows through anywhere; without them (the
-  setting off) the gaps show (tested).
+  setting off) the gaps show (tested). One place they cannot reach: with the eye in a seam's vertical plane, a ray
+  along the seam passes between two levels' edges and the skirts are seen edge on (a pixel, on lavapipe;
+  `docs/pitfalls.md`).
 - **What the vertices carry for the material:** the planar position (from the tile's origin plus that origin modulo
   16384 m) split in high and low float16 halves over UV0 and UV1 (millimetres, continuous across tiles for every
   texture whose repeat divides 16384 m); the altitude in two bytes of the vertex colour (1/8 m, linear between
@@ -101,7 +103,8 @@ than `snowSlopeEnd`; value noise breaks the lines (`jitter`) and tints large slo
 ways (triplanar, `triplanarSharpness`) with the normal maps whiteout-blended; the altitude's screen gradients come from
 the slope. The rules' CPU twin (`TerrainLayers`) is tested against the shader point for point (a test kernel). Every
 way the engine shades runs it (forward, the visibility buffer, ray and probe hits), and the shading hooks lie on it:
-effects-weather's snow (`weather.snow`) covers it (tested), effects-atmosphere's aerial perspective fogs it.
+effects-weather's snow (`weather.snow`) covers it (tested; over steep terrain its occlusion map wants a bias of a
+texel's rise, `weather.snow.bias` 3 m at 1.6 m texels), effects-atmosphere's aerial perspective fogs it.
 
 ## Shadows, global illumination, ray tracing
 
