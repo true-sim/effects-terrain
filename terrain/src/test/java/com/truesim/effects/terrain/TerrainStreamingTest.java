@@ -38,13 +38,19 @@ class TerrainStreamingTest {
             assertThat(rig.resources.mesh(firstMesh)).as("its mesh on the GPU").isNotNegative();
 
             // Fly 6 km east, 150 m a frame, looking down ahead: the ground shows whole in every frame
-            int worst = 0;
+            StringBuilder holes = new StringBuilder();
             for (double x = 150; x <= 6000; x += 150) {
                 rig.look(x, terrain.heightAt(x, 0) + 250, 0, 1, -0.8, 0.2);
                 rig.frame();
-                worst = Math.max(worst, rig.background(rig.argb()));
+                int[] argb = rig.argb();
+                for (int i = 0; i < argb.length; i++) {
+                    if ((argb[i] & 0xffffff) == 0xff00ff) {
+                        holes.append(String.format(java.util.Locale.ROOT, " (x %.0f: pixel %d, %d)", x, i % 96,
+                            i / 96));
+                    }
+                }
             }
-            assertThat(worst).as("background pixels in any frame of the flight").isZero();
+            assertThat(holes.toString()).as("background pixels in the frames of the flight").isEmpty();
             rig.settle(400);
             assertThat(terrain.shows(under(6000, 0, 0, grid))).as("the finest tile under the camera now").isTrue();
             assertThat(terrain.shows(first)).as("the one it left").isFalse();
