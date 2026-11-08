@@ -46,3 +46,16 @@ more) by more than the default 0.15 m bias, so it counted as sheltered (`Terrain
 With `weather.snow.bias` 3 m, the whole view is snow.
 
 **Rule.** Over terrain, set the snow's bias to about a map texel times the steepest slope's rise.
+
+## Skirts cannot close a gap seen along its own seam
+
+**What happened.** `TerrainStreamingTest` flew along z = 0, a line every level's tiles have a seam on, and on CI's
+lavapipe one pixel showed the background in 3 of 40 frames, always pixel (36, 9) (the RX 9070 XT showed none; with
+occlusion culling off the same). Marching that pixel's ray on the CPU: it ran within the plane z = 0, meeting the
+terrain exactly on the seam between a 1 km tile and a 512 m tile. With the eye in the seam's vertical plane, a ray
+along it passes between the two levels' edges, and the skirts, lying in that plane, are seen edge on and cover no
+pixel.
+
+**Rule.** Not a gap the skirts leave anywhere else: the eye must be in the seam's plane to the precision of a pixel.
+Tests keep the camera off seam planes (`TerrainStreamingTest.LANE`). Proof: run 42513466369's log (the ray's hit at
+z = -0.0 and the tiles there) and its `hole-*.png`.

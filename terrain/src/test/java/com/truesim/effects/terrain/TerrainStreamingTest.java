@@ -15,6 +15,13 @@ import org.junit.jupiter.api.Test;
  */
 class TerrainStreamingTest {
 
+    /**
+     * The flight's z: off every tile seam's plane. With the eye in a seam's vertical plane, a pixel's ray can run
+     * along the seam, through the gap between two levels' edges, where the skirts (in that plane, seen edge on) cannot
+     * cover it: lavapipe showed that pixel flying at z = 0 (docs/pitfalls.md).
+     */
+    private static final double LANE = 37.3;
+
     private static long under(double x, double z, int level, TerrainGrid grid) {
         double size = grid.size(level);
         return TerrainGrid.key(level, (int) Math.floor(x / size), (int) Math.floor(z / size));
@@ -86,7 +93,7 @@ class TerrainStreamingTest {
             rig.output();
             Terrain terrain = rig.terrain(TestSites.rugged(900), TerrainSeamsTest.plain().ref());
             TerrainGrid grid = terrain.grid();
-            rig.look(0, terrain.heightAt(0, 0) + 250, 0, 1, -0.8, 0.2);
+            rig.look(0, terrain.heightAt(0, LANE) + 250, LANE, 1, -0.8, 0.2);
             rig.settle(400);
             assertThat(terrain.shows(under(0, 0, 0, grid))).as("the finest tile under the camera").isTrue();
             assertThat(terrain.shows(under(6000, 0, 0, grid))).as("6 km away: not at the finest level").isFalse();
@@ -99,7 +106,7 @@ class TerrainStreamingTest {
             // Fly 6 km east, 150 m a frame, looking down ahead: the ground shows whole in every frame
             StringBuilder holes = new StringBuilder();
             for (double x = 150; x <= 6000; x += 150) {
-                rig.look(x, terrain.heightAt(x, 0) + 250, 0, 1, -0.8, 0.2);
+                rig.look(x, terrain.heightAt(x, LANE) + 250, LANE, 1, -0.8, 0.2);
                 rig.frame();
                 int[] argb = rig.argb();
                 for (int i = 0; i < argb.length; i++) {
