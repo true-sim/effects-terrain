@@ -86,3 +86,29 @@ offset`). Terrain covers the view's edges; scenes with sky at the edges (depth 0
 **Rule.** (By reading of the code; the errors came with and without sky in view.) An engine bug to fix there (take the
 other neighbour when the clamped one is the pixel, or skip it);
 until then the ray-traced shadows test is skipped under GPU-assisted validation, and runs under core validation.
+
+## Layers that follow each level's own slope and curvature flicker as tiles switch
+
+**What happened.** The first film (`terrain-flight.mp4`, v0.1.0) flickered: looking for blocks of 10 x 10 pixels (of
+160 x 90) that change and change back from one frame to the next, frames 50 to 71 (the camera 25 m over the slope
+under the cliffs) changed blocks by up to 26-42 of 255 and back, where the camera's own motion changes the
+worst block by 6 in 95 % of frames; the patches of grass and scree jumped from frame to frame. Drawing each frame twice
+at one camera, before and after the terrain's update (`LodSwitchAnalysis`), put it on the switches: the material's
+layers followed the slope of each level's normals and a curvature measured at each level's spacing, and tiles
+switched levels at once, so a switch moved the layers' lines across whole tiles.
+
+**Rule.** Nothing the material reads may depend on a tile's level unless it morphs with the level: tiles morph between
+levels' surfaces (normals too), the curvature is measured on a grid fixed in the world (`terrain.layerScale`).
+Proof: `LodTransitionTest` (switching at once with each level's own curvature changes a block by more than the
+camera's motion within a frame; morphing, it does not).
+
+## A deformed copy does not carry data in its tangents
+
+**What happened.** Carrying the layers' slope normal in the TANGENT attribute, tiles drew right until they morphed:
+as deformed copies (a morph target, `GeometryPool.addDeformed`) the morphing tiles drew flat grey, all rock, in
+`LodTransitionTest`'s pictures, and the change in a frame reached 30 of 255. In the colour's alpha the slope survived
+the copies. Observed, not traced in the engine: the deformation pass presumably rebuilds tangents against the morphed
+normals, which would turn a normal-like tangent into a near-zero vector.
+
+**Rule.** Data for the material goes in the colour or the UV sets, never the tangent, on anything that may be
+deformed.

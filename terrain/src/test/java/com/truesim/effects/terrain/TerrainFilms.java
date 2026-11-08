@@ -55,7 +55,7 @@ class TerrainFilms {
     private static final int WIDTH = 1280;
     private static final int HEIGHT = 720;
     private static final double FPS = 30;
-    private static final Setting<Float> EV100 = AtmosphereSky.ATMOSPHERE.setting("ev100");
+    static final Setting<Float> EV100 = AtmosphereSky.ATMOSPHERE.setting("ev100");
     /** Stops darker than the automatic exposure: snow, scree and the sky fill these views, which it would make grey. */
     private static final double COMPENSATION = 1.3;
 
@@ -76,13 +76,13 @@ class TerrainFilms {
      */
     static final List<Key> FLIGHT = List.of(
         new Key(0, -120, 25, 500, 150, 120, 3500),
-        new Key(5, -60, 60, 1700, 600, 400, 5200),
-        new Key(10, 300, 420, 2900, 4100, 2600, 6300),
-        new Key(15, 1700, 1500, 2600, 6000, 1500, -1500),
-        new Key(20, 3600, 2500, 700, 9000, 1200, -9000),
-        new Key(26, 5200, 3600, -2400, 30000, 600, -40000));
+        new Key(7, -60, 60, 1700, 600, 400, 5200),
+        new Key(12, 300, 420, 2900, 4100, 2600, 6300),
+        new Key(17, 1700, 1500, 2600, 6000, 1500, -1500),
+        new Key(22, 3600, 2500, 700, 9000, 1200, -9000),
+        new Key(28, 5200, 3600, -2400, 30000, 600, -40000));
 
-    private static final double DURATION = 26;
+    private static final double DURATION = 28;
 
     /** Catmull-Rom between the keys at time {@code t}: {position, look-at}. */
     static double[] at(double t) {
@@ -158,9 +158,13 @@ class TerrainFilms {
     }
 
     /** A rig drawing the site under the atmosphere's sky with the sun's cascaded shadows, half-float colour. */
-    private record Sky(TerrainRig rig, Atmosphere atmosphere) {
+    record Sky(TerrainRig rig, Atmosphere atmosphere) {
         static Sky of(TestGpu gpu, int width, int height) {
-            TerrainRig rig = new TerrainRig(gpu, width, height, true, true, settings());
+            return of(gpu, width, height, settings());
+        }
+
+        static Sky of(TestGpu gpu, int width, int height, EngineSettings settings) {
+            TerrainRig rig = new TerrainRig(gpu, width, height, true, true, settings);
             Atmosphere atmosphere = rig.closing(new Atmosphere(rig.device, rig.slots, rig.graph.settings()));
             Environment environment = Environment.uniform("atmosphere", 0, 0, 0);
             SkyCapture capture = rig.closing(new SkyCapture(atmosphere, environment, rig.textures));
@@ -315,6 +319,111 @@ class TerrainFilms {
                 assertThat(ffmpeg.waitFor()).as("ffmpeg").isZero();
             }
         }
+    }
+
+    /**
+     * {@code terrain-switch-compare.mp4}: two moments of the flight where tiles switched levels most (the first film's
+     * worst switches, at 8.7 and 12.7 s of its quicker start), slowed eight times, as the terrain was (left: switching at once, each level's layers
+     * following its own slope and curvature) and as it is (right: tiles morphing between levels, layers at
+     * {@code terrain.layerScale}), at one exposure.
+     */
+    @Test
+    void switchComparison() throws Exception {
+        assumeThat(TestSites.lauterbrunnen()).as("the Lauterbrunnen site imported into the terrain cache").isNotNull();
+        Path dir = Path.of(System.getProperty("truesim.screenshots", "build/films"));
+        Files.createDirectories(dir);
+        int half = WIDTH / 2;
+        double[][] windows = {{10.2, 10.9}, {14.3, 14.9}}; // where the flight switched most, the first film's 8.7 and 12.7 s
+        int slow = 8;
+        EngineSettings before = settings();
+        before.set(TerrainSettings.MORPH_SECONDS, 0f);
+        before.set(TerrainSettings.LAYER_SCALE, 1f);
+        List<byte[]> left = new ArrayList<>();
+        List<byte[]> right = new ArrayList<>();
+        List<Double> times = new ArrayList<>();
+        for (double[] window : windows) {
+            left.addAll(segment(before, half, window[0], window[1], slow));
+            right.addAll(segment(settings(), half, window[0], window[1], slow));
+            for (int f = 0; f < Math.round((window[1] - window[0]) * FPS * slow); f++) {
+                times.add(window[0] + f / (FPS * slow));
+            }
+        }
+        Process ffmpeg = ffmpeg(dir.resolve("terrain-switch-compare.mp4"), WIDTH, HEIGHT, 20);
+        BufferedImage frame = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
+        byte[] rgb = new byte[3 * WIDTH * HEIGHT];
+        try (OutputStream out = ffmpeg.getOutputStream()) {
+            for (int f = 0; f < Math.min(left.size(), right.size()); f++) {
+                for (int y = 0; y < HEIGHT; y++) {
+                    System.arraycopy(left.get(f), 3 * y * half, rgb, 3 * y * WIDTH, 3 * half);
+                    System.arraycopy(right.get(f), 3 * y * half, rgb, 3 * (y * WIDTH + half), 3 * half);
+                }
+                for (int y = 0; y < HEIGHT; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int o = 3 * (y * WIDTH + x);
+                        frame.setRGB(x, y, (rgb[o] & 0xff) << 16 | (rgb[o + 1] & 0xff) << 8 | (rgb[o + 2] & 0xff));
+                    }
+                }
+                Graphics2D g = frame.createGraphics();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+                g.setColor(new java.awt.Color(0, 0, 0, 140));
+                g.fillRect(0, 0, WIDTH, 34);
+                g.setColor(java.awt.Color.WHITE);
+                g.drawString("before: switch at once, layers per level", 14, 23);
+                g.drawString("after: morphing levels, layers at one scale", half + 14, 23);
+                g.drawString(String.format(Locale.ROOT, "%.3f s, slowed %dx", times.get(f), slow), 14, HEIGHT - 14);
+                g.fillRect(half - 1, 0, 2, HEIGHT);
+                g.dispose();
+                for (int y = 0; y < HEIGHT; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int c = frame.getRGB(x, y);
+                        int o = 3 * (y * WIDTH + x);
+                        rgb[o] = (byte) (c >> 16);
+                        rgb[o + 1] = (byte) (c >> 8);
+                        rgb[o + 2] = (byte) c;
+                    }
+                }
+                out.write(rgb);
+            }
+        }
+        assertThat(ffmpeg.waitFor()).as("ffmpeg").isZero();
+    }
+
+    /** The flight from {@code from} to {@code to} seconds, slowed {@code slow} times, as RGB frames {@code width} wide. */
+    private static List<byte[]> segment(EngineSettings settings, int width, double from, double to, int slow)
+        throws Exception {
+        List<byte[]> frames = new ArrayList<>();
+        try (TestGpu gpu = TestGpu.open()) {
+            Sky sky = Sky.of(gpu, width, HEIGHT, settings);
+            try (TerrainRig rig = sky.rig()) {
+                Terrain terrain = rig.terrain(load(rig), alpine().ref());
+                rig.fov(Math.toRadians(55));
+                rig.frameSeconds = 1 / (FPS * slow);
+                rig.graph.settings().set(EV100, 11.2f);
+                place(rig, terrain, from - 1);
+                rig.settle(400);
+                for (double t = from - 1; t < from; t += 1 / FPS) { // the flight's last second at full speed first
+                    place(rig, terrain, t);
+                    rig.frameSeconds = 1 / FPS;
+                    step(rig, terrain);
+                }
+                rig.frameSeconds = 1 / (FPS * slow);
+                int count = (int) Math.round((to - from) * FPS * slow);
+                for (int f = 0; f < count; f++) {
+                    place(rig, terrain, from + f / (FPS * slow));
+                    rig.frame();
+                    float[] color = rig.rgb();
+                    byte[] rgb = new byte[3 * width * HEIGHT];
+                    for (int i = 0; i < width * HEIGHT; i++) {
+                        rgb[3 * i] = (byte) tone(color[3 * i]);
+                        rgb[3 * i + 1] = (byte) tone(color[3 * i + 1]);
+                        rgb[3 * i + 2] = (byte) tone(color[3 * i + 2]);
+                    }
+                    frames.add(rgb);
+                }
+            }
+        }
+        return frames;
     }
 
     /**

@@ -14,6 +14,7 @@ import com.truesim.scene.core.Mobility;
 import com.truesim.scene.core.NodeHandle;
 import com.truesim.scene.core.SceneGraph;
 import com.truesim.scene.render.MaterialData;
+import com.truesim.scene.render.MorphWeights;
 import com.truesim.scene.render.RenderAssets;
 import com.truesim.scene.render.Renderable;
 import com.truesim.scene.world.Cell;
@@ -82,6 +83,15 @@ public final class Terrain implements AutoCloseable {
     private final ArrayList<Tile> roots = new ArrayList<>();
     private final ArrayList<Tile> display = new ArrayList<>();
     private final ArrayList<Tile> active = new ArrayList<>();
+    private final ArrayList<Tile> morphHolding = new ArrayList<>();
+    private final ArrayList<Transition> transitions = new ArrayList<>();
+    private final ArrayList<Tile> anchors = new ArrayList<>();
+    private final ArrayList<Tile> merges = new ArrayList<>();
+    private final ArrayList<Tile> scratch = new ArrayList<>();
+    private final double[] weight = new double[1];
+    private final double[] slopeNormal = new double[3];
+    private final ComponentStore<MorphWeights> morphWeights;
+    private long lastUpdate = -1;
     private double cameraX;
     private double cameraY;
     private double cameraZ;
@@ -116,12 +126,14 @@ public final class Terrain implements AutoCloseable {
         SurfaceParameters detail = TerrainSettings.surface(settings);
         surface = new TerrainSurface(site, detail);
         meshes = new TileMeshes(surface, grid, settings.get(TerrainSettings.SKIRT_MARGIN),
-            settings.get(TerrainSettings.CURVATURE_SCALE)).skirts(settings.get(TerrainSettings.SKIRTS));
+            settings.get(TerrainSettings.CURVATURE_SCALE)).skirts(settings.get(TerrainSettings.SKIRTS))
+            .layerScale(settings.get(TerrainSettings.LAYER_SCALE));
         layer = Layer.of("terrain " + site.id(), Long.class, Levels.grid(grid.tileSize(), grid.levels()));
         errors = TerrainError.measure(surface, grid, settings.get(TerrainSettings.RANGE),
             settings.get(TerrainSettings.ERROR_SAMPLES));
         bands = new double[grid.levels()];
         renderables = scene.components().store(Renderable.TYPE);
+        morphWeights = scene.components().store(MorphWeights.TYPE);
         root = scene.create();
         scene.setMobility(root, Mobility.STATIC);
         world.register(layer, new Loader());
@@ -184,7 +196,13 @@ public final class Terrain implements AutoCloseable {
     /** The mesh asset of tile {@code key}. */
     @AllowAllocation("a reference made as a tile is first wanted")
     public AssetRef<com.truesim.scene.assets.mesh.MeshData> mesh(long key) {
-        return AssetRef.generated(RenderAssets.MESH, meshes, key, 0);
+        return AssetRef.generated(RenderAssets.MESH, meshes, new TileMeshes.TileMesh(key, -1), 0);
+    }
+
+    /** The mesh asset of tile {@code key} with a morph target onto level {@code level}'s surface. */
+    @AllowAllocation("a reference made as a tile transitions")
+    public AssetRef<com.truesim.scene.assets.mesh.MeshData> morphMesh(long key, int level) {
+        return AssetRef.generated(RenderAssets.MESH, meshes, new TileMeshes.TileMesh(key, level), 0);
     }
 
     /**
@@ -261,6 +279,17 @@ public final class Terrain implements AutoCloseable {
      * update, before the scene's and the sync's.
      */
     public void update() {
+        long now = System.nanoTime();
+        double seconds = lastUpdate < 0 ? 0 : Math.min(0.1, (now - lastUpdate) / 1e9);
+        lastUpdate = now;
+        update(seconds);
+    }
+
+    /**
+     * {@link #update()} with {@code seconds} gone since the last: what level transitions move on by (for frames drawn
+     * at a pace of their own, as films are).
+     */
+    public void update(double seconds) {
         if (closed) {
             throw new IllegalStateException("Closed");
         }
@@ -275,9 +304,18 @@ public final class Terrain implements AutoCloseable {
             newHolds = true;
             budget--;
         }
-        long now = resources.residency();
-        if (now != residency || newHolds) {
-            residency = now;
+        long resident = resources.residency();
+        if (resident != residency || newHolds) {
+            residency = resident;
+            for (int i = morphHolding.size() - 1; i >= 0; i--) {
+                Tile tile = morphHolding.get(i);
+                if (resources.mesh(tile.morph) >= 0) {
+                    tile.morphResident = true;
+                    morphHolding.set(i, morphHolding.getLast());
+                    morphHolding.removeLast();
+                    dirty = true;
+                }
+            }
             for (int i = holding.size() - 1; i >= 0; i--) {
                 Tile tile = holding.get(i);
                 if (resources.mesh(tile.mesh) >= 0) {
@@ -290,6 +328,7 @@ public final class Terrain implements AutoCloseable {
             }
         }
         refine();
+        advance(seconds);
         if (dirty) {
             dirty = false;
             arrange();
@@ -365,28 +404,263 @@ public final class Terrain implements AutoCloseable {
         holding.add(tile);
     }
 
-    /** Works out the shown tiles and makes or removes nodes to match. */
+    /**
+     * A level transition: a split (a tile's finer tiles shown morphed onto its surface, then unmorphing) or a merge (a
+     * tile's finer tiles morphing onto its surface, then it shown in their place). Its members' morph weight runs over
+     * {@code terrain.morphSeconds}, eased, so no switch moves the surface within a frame.
+     */
+    static final class Transition {
+        final boolean merge;
+        final Tile anchor;
+        final ArrayList<Tile> members;
+        double progress;
+
+        Transition(boolean merge, Tile anchor, ArrayList<Tile> members) {
+            this.merge = merge;
+            this.anchor = anchor;
+            this.members = members;
+        }
+    }
+
+    /** How many level transitions are under way. */
+    public int transitioning() {
+        return transitions.size();
+    }
+
+    /** Moves the transitions on by {@code seconds}: their members' morph weights; those done finish. */
+    private void advance(double seconds) {
+        if (transitions.isEmpty()) {
+            return;
+        }
+        double duration = settings.get(TerrainSettings.MORPH_SECONDS);
+        for (int i = transitions.size() - 1; i >= 0; i--) {
+            Transition transition = transitions.get(i);
+            transition.progress = duration <= 0 ? 1 : Math.min(1, transition.progress + seconds / duration);
+            double t = transition.progress;
+            double eased = t * t * (3 - 2 * t);
+            double w = transition.merge ? eased : 1 - eased;
+            for (int m = 0; m < transition.members.size(); m++) {
+                setWeight(transition.members.get(m), w);
+            }
+            if (t >= 1) {
+                finish(transition);
+                transitions.set(i, transitions.getLast());
+                transitions.removeLast();
+                dirty = true;
+            }
+        }
+    }
+
+    private void finish(Transition transition) {
+        ArrayList<Tile> members = transition.members;
+        if (transition.merge) {
+            Tile anchor = transition.anchor;
+            anchor.transition = null;
+            showNode(anchor, false, 0);
+            for (int m = 0; m < members.size(); m++) {
+                Tile member = members.get(m);
+                member.transition = null;
+                removeNode(member);
+                releaseMorph(member);
+            }
+        } else {
+            for (int m = 0; m < members.size(); m++) {
+                Tile member = members.get(m);
+                member.transition = null;
+                swap(member, false, 0);
+                releaseMorph(member);
+            }
+        }
+    }
+
+    /**
+     * Works out the shown tiles and changes the nodes to match: tiles replacing a shown coarser one start a split
+     * (once each has its morphing mesh on the GPU), a tile replacing shown finer ones a merge (likewise), a tile over
+     * nothing shown shows at once, and a shown tile nothing replaces whose area is no longer wanted goes. What a
+     * transition holds waits for it to finish.
+     */
+    @AllowAllocation("tiles changing")
     private void arrange() {
         display.clear();
         for (int i = 0; i < roots.size(); i++) {
             cover(roots.get(i), false);
         }
         for (int i = 0; i < display.size(); i++) {
-            display.get(i).show = true;
+            Tile tile = display.get(i);
+            tile.show = true;
+            for (Tile up = parentOf(tile); up != null && !up.showUnder; up = parentOf(up)) {
+                up.showUnder = true;
+            }
+        }
+        anchors.clear();
+        merges.clear();
+        for (int i = 0; i < display.size(); i++) {
+            Tile tile = display.get(i);
+            if (tile.shown() || tile.transition != null) {
+                continue;
+            }
+            Tile ancestor = shownAncestor(tile);
+            if (ancestor != null) {
+                if (ancestor.transition == null) {
+                    if (ancestor.gathered == null) {
+                        ancestor.gathered = new ArrayList<>();
+                    }
+                    if (ancestor.gathered.isEmpty()) {
+                        anchors.add(ancestor);
+                    }
+                    ancestor.gathered.add(tile);
+                }
+            } else if (tile.shownBelow > 0) {
+                merges.add(tile);
+            } else {
+                showNode(tile, false, 0);
+            }
+        }
+        for (int i = 0; i < anchors.size(); i++) {
+            Tile anchor = anchors.get(i);
+            ArrayList<Tile> gathered = anchor.gathered;
+            boolean ready = true;
+            for (int g = 0; g < gathered.size(); g++) {
+                ready &= morphReady(gathered.get(g), anchor.level);
+            }
+            if (ready) {
+                Transition transition = new Transition(false, anchor, new ArrayList<>(gathered));
+                for (int g = 0; g < gathered.size(); g++) {
+                    Tile tile = gathered.get(g);
+                    showNode(tile, true, 1);
+                    tile.transition = transition;
+                }
+                removeNode(anchor);
+                transitions.add(transition);
+            }
+            gathered.clear();
+        }
+        for (int i = 0; i < merges.size(); i++) {
+            Tile target = merges.get(i);
+            scratch.clear();
+            shownUnder(target, scratch);
+            boolean ready = !scratch.isEmpty();
+            for (int d = 0; d < scratch.size(); d++) {
+                Tile below = scratch.get(d);
+                ready &= below.transition == null && morphReady(below, target.level);
+            }
+            if (ready) {
+                Transition transition = new Transition(true, target, new ArrayList<>(scratch));
+                target.transition = transition;
+                for (int d = 0; d < scratch.size(); d++) {
+                    Tile below = scratch.get(d);
+                    swap(below, true, 0);
+                    below.transition = transition;
+                }
+                transitions.add(transition);
+            }
         }
         for (int slot = 0; slot < tiles.capacity(); slot++) {
             Tile tile = tiles.at(slot);
             if (tile == null) {
                 continue;
             }
-            if (tile.show && !tile.shown()) {
-                showNode(tile);
-            } else if (!tile.show && tile.shown()) {
-                removeNode(tile);
+            if (tile.shown() && !tile.show && tile.transition == null && !tile.showUnder
+                && showingAncestor(tile) == null) {
+                removeNode(tile); // its area is no longer wanted
             }
-            tile.show = false;
+        }
+        for (int slot = 0; slot < tiles.capacity(); slot++) {
+            Tile tile = tiles.at(slot);
+            if (tile != null) {
+                tile.show = false;
+                tile.showUnder = false;
+            }
         }
         forgetUnused();
+    }
+
+    private Tile parentOf(Tile tile) {
+        return tile.level == grid.levels() - 1 ? null : tiles.get(TerrainGrid.parent(tile.key));
+    }
+
+    private Tile shownAncestor(Tile tile) {
+        for (Tile up = parentOf(tile); up != null; up = parentOf(up)) {
+            if (up.shown()) {
+                return up;
+            }
+        }
+        return null;
+    }
+
+    /** An ancestor that is shown, about to be, or a merge's target, or null. */
+    private Tile showingAncestor(Tile tile) {
+        for (Tile up = parentOf(tile); up != null; up = parentOf(up)) {
+            if (up.shown() || up.show || up.transition != null) {
+                return up;
+            }
+        }
+        return null;
+    }
+
+    /** Adds the shown tiles under {@code tile} to {@code into}. */
+    private void shownUnder(Tile tile, ArrayList<Tile> into) {
+        if (tile.level == 0) {
+            return;
+        }
+        for (int c = 0; c < 4; c++) {
+            Tile child = tiles.get(TerrainGrid.child(tile.key, c));
+            if (child == null || child.shownBelow == 0) {
+                continue;
+            }
+            if (child.shown()) {
+                into.add(child);
+            } else {
+                shownUnder(child, into);
+            }
+        }
+    }
+
+    /** Whether {@code tile}'s mesh morphing onto {@code level}'s surface is on the GPU; asks for it if not. */
+    @AllowAllocation("a tile's morphing mesh asked for")
+    private boolean morphReady(Tile tile, int level) {
+        if (tile.morph != null && tile.morphLevel != level) {
+            if (tile.morphing) {
+                return false; // drawn: it changes once its transition is done
+            }
+            releaseMorph(tile);
+        }
+        if (tile.morph == null) {
+            tile.morph = morphMesh(tile.key, level);
+            tile.morphLevel = level;
+            tile.morphResident = false;
+            resources.hold(tile.morph);
+            morphHolding.add(tile);
+        }
+        return tile.morphResident;
+    }
+
+    private void releaseMorph(Tile tile) {
+        if (tile.morph != null) {
+            resources.release(tile.morph);
+            morphHolding.remove(tile);
+            tile.morph = null;
+            tile.morphLevel = -1;
+            tile.morphResident = false;
+        }
+    }
+
+    private void setWeight(Tile tile, double w) {
+        if (tile.morphing) {
+            weight[0] = w;
+            MorphWeights.write(scene, tile.node, weight, 0, 1);
+        }
+    }
+
+    /** Draws {@code tile}'s node with its morphing mesh at weight {@code w}, or its own mesh. */
+    private void swap(Tile tile, boolean morphing, double w) {
+        Renderable.setMesh(scene, tile.node, morphing ? tile.morph : tile.mesh);
+        tile.morphing = morphing;
+        if (morphing) {
+            setWeight(tile, w);
+        } else {
+            morphWeights.remove(tile.node);
+        }
     }
 
     /**
@@ -435,14 +709,18 @@ public final class Terrain implements AutoCloseable {
     }
 
     @AllowAllocation("a tile's node made as it shows")
-    private void showNode(Tile tile) {
+    private void showNode(Tile tile, boolean morphing, double w) {
         double size = grid.size(tile.level);
         long node = scene.create(root);
         scene.setTranslation(node, TerrainGrid.x(tile.key) * size, 0, TerrainGrid.z(tile.key) * size);
         scene.setMobility(node, Mobility.STATIC);
-        renderables.set(node, Renderable.of(tile.mesh, levelMaterials == null ? materials
+        renderables.set(node, Renderable.of(morphing ? tile.morph : tile.mesh, levelMaterials == null ? materials
             : levelMaterials.get(Math.min(tile.level, levelMaterials.size() - 1))));
         tile.node = node;
+        tile.morphing = morphing;
+        if (morphing) {
+            setWeight(tile, w);
+        }
         count(tile, 0, 1);
         shownCount++;
     }
@@ -450,6 +728,7 @@ public final class Terrain implements AutoCloseable {
     private void removeNode(Tile tile) {
         scene.remove(tile.node);
         tile.node = NodeHandle.NONE;
+        tile.morphing = false;
         count(tile, 0, -1);
         shownCount--;
         forgettable.add(tile);
@@ -459,7 +738,8 @@ public final class Terrain implements AutoCloseable {
     private void forgetUnused() {
         for (int i = 0; i < forgettable.size(); i++) {
             Tile tile = forgettable.get(i);
-            if (!tile.wanted && !tile.shown()) {
+            if (!tile.wanted && !tile.shown() && tile.transition == null) {
+                releaseMorph(tile);
                 if (tile.held) {
                     resources.release(tile.mesh);
                     tile.held = false;
@@ -630,21 +910,35 @@ public final class Terrain implements AutoCloseable {
 
     /**
      * The material's layers at ({@code x}, {@code z}) (rock, grass, scree, snow: {@link TerrainLayers}) by the rules
-     * set with {@link #rules}, from the finest tiles' slope, altitude and curvature, into {@code weights}.
+     * set with {@link #rules}, from the finest tiles' slope and altitude and the curvature at {@code terrain.layerScale}
+     * the tiles carry (the same at every level finer than it), into {@code weights}. Not thread-safe.
      */
     public void layers(double x, double z, double[] weights) {
-        double s = grid.spacing(0);
-        double h = surface.height(x, z, s);
-        double hx0 = surface.height(x - s, z, s);
-        double hx1 = surface.height(x + s, z, s);
-        double hz0 = surface.height(x, z - s, s);
-        double hz1 = surface.height(x, z + s, s);
-        double dx = (hx1 - hx0) / (2 * s);
-        double dz = (hz1 - hz0) / (2 * s);
-        double slope = Maths.toDegrees(Maths.atan(Math.sqrt(dx * dx + dz * dz)));
-        double laplacian = (hx0 + hx1 + hz0 + hz1 - 4 * h) / (s * s);
+        double scale = Math.max(settings.get(TerrainSettings.LAYER_SCALE), grid.spacing(0));
+        double fx = x / scale;
+        double fz = z / scale;
+        double ix = Math.floor(fx);
+        double iz = Math.floor(fz);
+        double u = fx - ix;
+        double w = fz - iz;
+        double laplacian = 0;
+        for (int k = 0; k < 4; k++) {
+            double gx = (ix + (k & 1)) * scale;
+            double gz = (iz + (k >> 1)) * scale;
+            double weight = ((k & 1) == 0 ? 1 - u : u) * ((k >> 1) == 0 ? 1 - w : w);
+            double h = surface.height(gx, gz, scale);
+            double hx0 = surface.height(gx - scale, gz, scale);
+            double hx1 = surface.height(gx + scale, gz, scale);
+            double hz0 = surface.height(gx, gz - scale, scale);
+            double hz1 = surface.height(gx, gz + scale, scale);
+            laplacian += weight * (hx0 + hx1 + hz0 + hz1 - 4 * h) / (scale * scale);
+        }
         double curvature = Math.clamp(laplacian / settings.get(TerrainSettings.CURVATURE_SCALE), -1, 1);
-        TerrainLayers.weights(rules, h + surface.fall(x, z), slope, curvature, weights);
+        double s0 = grid.spacing(0);
+        double[] normal = slopeNormal;
+        surface.normalAt(x, z, s0, normal);
+        double slope = Maths.toDegrees(Maths.acos(Math.clamp(normal[1], -1, 1)));
+        TerrainLayers.weights(rules, surface.height(x, z, s0) + surface.fall(x, z), slope, curvature, weights);
     }
 
     /**

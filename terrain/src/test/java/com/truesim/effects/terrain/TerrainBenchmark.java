@@ -115,6 +115,7 @@ class TerrainBenchmark {
             List<Double> sceneSync = new ArrayList<>();
             List<Double> gpuFrames = new ArrayList<>();
             int maxPending = 0;
+            int maxTransitions = 0;
             int maxShown = 0;
             long start = System.nanoTime();
             int frames = 26 * 30;
@@ -131,7 +132,7 @@ class TerrainBenchmark {
                 long tw = System.nanoTime();
                 rig.world.update();
                 long tt = System.nanoTime();
-                terrain.update();
+                terrain.update(1 / 30.0);
                 long t2 = System.nanoTime();
                 rig.scene.update();
                 rig.sync.update();
@@ -148,6 +149,7 @@ class TerrainBenchmark {
                     gpuFrames.add(timings.spanMillis());
                 }
                 maxPending = Math.max(maxPending, terrain.pendingTiles());
+                maxTransitions = Math.max(maxTransitions, terrain.transitioning());
                 maxShown = Math.max(maxShown, terrain.shownTiles());
                 // wait out the frame's remaining 33 ms, as a game paced at 30 fps would
                 long wait = 33_333_333L - (System.nanoTime() - t0);
@@ -157,11 +159,12 @@ class TerrainBenchmark {
             }
             System.out.printf(Locale.ROOT, "BENCH flight (%.1f s): terrain + world update median %.3f ms, p99 %.3f ms,"
                 + " max %.3f ms (world %.3f / p99 %.3f, terrain %.3f / p99 %.3f; scene and sync after %.3f / p99 %.3f);"
-                + " GPU frame median %.3f ms, p99 %.3f; up to %d tiles shown, up to %d waiting for their mesh%n",
+                + " GPU frame median %.3f ms, p99 %.3f; up to %d tiles shown, up to %d waiting for their mesh, up to %d"
+                + " level transitions at once%n",
                 (System.nanoTime() - start) / 1e9, median(update), percentile(update, 0.99), percentile(update, 1),
                 median(worldUpdate), percentile(worldUpdate, 0.99), median(terrainUpdate),
                 percentile(terrainUpdate, 0.99), median(sceneSync), percentile(sceneSync, 0.99), median(gpuFrames),
-                percentile(gpuFrames, 0.99), maxShown, maxPending);
+                percentile(gpuFrames, 0.99), maxShown, maxPending, maxTransitions);
         }
     }
 

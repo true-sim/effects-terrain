@@ -31,6 +31,18 @@ final class Tile {
     boolean refined;
     /** Whether the display being worked out shows it. */
     boolean show;
+    /** Whether the display being worked out shows a tile under it. */
+    boolean showUnder;
+    /** Its mesh morphing onto level {@link #morphLevel}'s surface (held while it transitions), or null. */
+    AssetRef<MeshData> morph;
+    int morphLevel = -1;
+    boolean morphResident;
+    /** Whether its node draws the morphing mesh. */
+    boolean morphing;
+    /** The transition it takes part in (a member, or a merge's target), or null. */
+    Terrain.Transition transition;
+    /** The tiles of a split under it, gathered while the display is worked out. */
+    java.util.ArrayList<Tile> gathered;
 
     Tile(long key) {
         this.key = key;

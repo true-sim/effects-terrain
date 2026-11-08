@@ -7,8 +7,8 @@
 //              every texture whose size divides 16384 m.
 //   COLOR.rg   the altitude above sea level (without the curvature's fall): (r * 255 * 256 + g * 255) / 8 - 1024
 //              metres, linear between vertices because the two bytes interpolate apart.
-//   COLOR.b    the curvature: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave: gullies, hollows).
-//   COLOR.a    unused (1).
+//   COLOR.b    the curvature at terrain.layerScale: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave).
+//   COLOR.a    1.
 //
 // The CPU twin of the layer rules is effects-terrain's TerrainLayers: keep them in step.
 module terrain;
@@ -147,6 +147,7 @@ public struct TerrainType : IMaterial
         float ny = max(abs(n.y), 0.08);
         float dAltX = -(n.x * dxz.x + n.z * dxz.y) / ny;
         float dAltY = -(n.x * dyz.x + n.z * dyz.y) / ny;
+        // The slope the layers follow: the surface's own, which tiles morph from level to level with their normals
         float slope = degrees(acos(clamp(n.y, -1.0, 1.0)));
         float noise = valueNoise(xz, 16) * 0.65 + valueNoise(xz, 4) * 0.35;
         float4 w = terrainLayers(p, altitude, slope, curvature, (noise - 0.5) * 2 * p.jitter);

@@ -23,7 +23,14 @@ import com.truesim.scene.meshbuild.MeshBuilder;
  * the color's red and green, the curvature in its blue.
  */
 @AllowAllocation("builds tiles in the background")
-public final class TileMeshes implements Generator<Long, MeshData> {
+public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData> {
+
+    /**
+     * A tile's mesh: tile {@code key}'s own, or ({@code morphTo} above its level) with a morph target onto that coarser
+     * level's surface (weight 1: exactly the coarser tile's triangles and normals over its area).
+     */
+    public record TileMesh(long key, int morphTo) {
+    }
 
     private static final VertexFormat FORMAT = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.UV0,
         VertexAttribute.UV1, VertexAttribute.COLOR);
@@ -36,6 +43,7 @@ public final class TileMeshes implements Generator<Long, MeshData> {
     /** What each tile built so far is: its error against the finer level, and its height range. */
     private final java.util.concurrent.ConcurrentHashMap<Long, Info> infos = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile boolean skirts = true;
+    private volatile double layerScale = 16;
 
     /**
      * Tiles of {@code grid} on {@code surface}, skirts {@code skirtMargin} metres past the gaps they close, curvature
@@ -60,6 +68,15 @@ public final class TileMeshes implements Generator<Long, MeshData> {
         return this;
     }
 
+    /**
+     * Measures the curvature the material's layers follow over {@code metres} at every level finer than that
+     * (carried in the colour's blue), so the layers do not change with the level.
+     */
+    public TileMeshes layerScale(double metres) {
+        this.layerScale = metres;
+        return this;
+    }
+
     public TerrainSurface surface() {
         return surface;
     }
@@ -69,8 +86,8 @@ public final class TileMeshes implements Generator<Long, MeshData> {
     }
 
     @Override
-    public MeshData generate(Long key, long seed) {
-        return build(key);
+    public MeshData generate(TileMesh mesh, long seed) {
+        return build(mesh.key(), mesh.morphTo());
     }
 
     /**
@@ -87,6 +104,11 @@ public final class TileMeshes implements Generator<Long, MeshData> {
 
     /** The mesh of tile {@code key}. */
     public MeshData build(long key) {
+        return build(key, -1);
+    }
+
+    /** The mesh of tile {@code key}, with a morph target onto level {@code morphTo}'s surface if it is coarser. */
+    public MeshData build(long key, int morphTo) {
         int level = TerrainGrid.level(key);
         int n = grid.quads();
         double size = grid.size(level);
@@ -117,6 +139,7 @@ public final class TileMeshes implements Generator<Long, MeshData> {
         float[] uv0 = new float[2 * vertices];
         float[] uv1 = new float[2 * vertices];
         float[] colors = new float[4 * vertices];
+        double[] layer = layerField(level, x0, z0, height, a);
         double px0 = Math.floorMod((long) x0, (long) TerrainGrid.PLANAR_PERIOD) + (x0 - Math.floor(x0));
         double pz0 = Math.floorMod((long) z0, (long) TerrainGrid.PLANAR_PERIOD) + (z0 - Math.floor(z0));
         for (int j = 0; j <= n; j++) {
@@ -135,7 +158,7 @@ public final class TileMeshes implements Generator<Long, MeshData> {
                 normals[3 * v + 2] = (float) (-dz / length);
                 split(px0 + i * s, uv0, uv1, 2 * v);
                 split(pz0 + j * s, uv0, uv1, 2 * v + 1);
-                double laplacian = (height[c + 1] + height[c - 1] + height[c + a] + height[c - a] - 4 * h) / (s * s);
+                double laplacian = layer[4 * v + 3];
                 int alt = Math.clamp(Math.round((altitude[c] + 1024) * 8), 0, 65535);
                 colors[4 * v] = (alt >>> 8) / 255f;
                 colors[4 * v + 1] = (alt & 0xff) / 255f;
@@ -209,10 +232,14 @@ public final class TileMeshes implements Generator<Long, MeshData> {
             high = Math.max(high, positions[3 * v + 1]);
         }
         infos.put(key, new Info(TerrainError.tile(surface, grid, key), low, high));
-        return new MeshBuilder(FORMAT, vertices).pool(pool).positions(positions)
-            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.UV0, uv0)
-            .attribute(VertexAttribute.UV1, uv1).attribute(VertexAttribute.COLOR, colors).submesh(indices)
-            .buildFlat();
+        MeshBuilder builder = new MeshBuilder(FORMAT, vertices).pool(pool).positions(positions)
+            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
+            .attribute(VertexAttribute.COLOR, colors).submesh(indices);
+        if (morphTo > level) {
+            float[][] deltas = morphDeltas(level, morphTo, x0, z0, positions, normals, top, vertices);
+            builder.morphTarget("coarser", deltas[0], deltas[1], null);
+        }
+        return builder.buildFlat();
     }
 
     /** {@code value} as a high and a low float16 summing to it within a millimetre, at {@code at} of uv0 and uv1. */
@@ -282,5 +309,169 @@ public final class TileMeshes implements Generator<Long, MeshData> {
         }
         double range = max - min + gap;
         return gap + skirtMargin + 2 * range / 65535;
+    }
+
+    /**
+     * The slope's normal (x, y, z) and the Laplacian (w) the material's layers follow at each top vertex: measured on
+     * a grid {@code layerScale} metres apart fixed in the world (the same samples for every level finer than that,
+     * at that footprint), bilinear between its points; at coarser levels, the tile's own samples.
+     */
+    double[] layerField(int level, double x0, double z0, double[] height, int a) {
+        int n = grid.quads();
+        double s = grid.spacing(level);
+        double scale = layerScale;
+        double[] out = new double[4 * (n + 1) * (n + 1)];
+        if (scale <= s) {
+            for (int j = 0; j <= n; j++) {
+                for (int i = 0; i <= n; i++) {
+                    int c = (j + 1) * a + i + 1;
+                    double dx = (height[c + 1] - height[c - 1]) / (2 * s);
+                    double dz = (height[c + a] - height[c - a]) / (2 * s);
+                    double length = Math.sqrt(dx * dx + 1 + dz * dz);
+                    int v = 4 * (j * (n + 1) + i);
+                    out[v] = -dx / length;
+                    out[v + 1] = 1 / length;
+                    out[v + 2] = -dz / length;
+                    out[v + 3] = (height[c + 1] + height[c - 1] + height[c + a] + height[c - a] - 4 * height[c])
+                        / (s * s);
+                }
+            }
+            return out;
+        }
+        double size = grid.size(level);
+        int gx0 = (int) Math.floor(x0 / scale) - 1;
+        int gz0 = (int) Math.floor(z0 / scale) - 1;
+        int count = (int) Math.ceil(size / scale) + 3;
+        double[] g = new double[count * count];
+        for (int j = 0; j < count; j++) {
+            for (int i = 0; i < count; i++) {
+                g[j * count + i] = surface.height((gx0 + i) * scale, (gz0 + j) * scale, scale);
+            }
+        }
+        double[] field = new double[4 * count * count];
+        for (int j = 1; j < count - 1; j++) {
+            for (int i = 1; i < count - 1; i++) {
+                int c = j * count + i;
+                double dx = (g[c + 1] - g[c - 1]) / (2 * scale);
+                double dz = (g[c + count] - g[c - count]) / (2 * scale);
+                double length = Math.sqrt(dx * dx + 1 + dz * dz);
+                field[4 * c] = -dx / length;
+                field[4 * c + 1] = 1 / length;
+                field[4 * c + 2] = -dz / length;
+                field[4 * c + 3] = (g[c + 1] + g[c - 1] + g[c + count] + g[c - count] - 4 * g[c]) / (scale * scale);
+            }
+        }
+        for (int j = 0; j <= n; j++) {
+            for (int i = 0; i <= n; i++) {
+                double fx = (x0 + i * s) / scale - gx0;
+                double fz = (z0 + j * s) / scale - gz0;
+                int ix = Math.clamp((int) Math.floor(fx), 1, count - 3);
+                int iz = Math.clamp((int) Math.floor(fz), 1, count - 3);
+                double u = fx - ix;
+                double w = fz - iz;
+                int v = 4 * (j * (n + 1) + i);
+                for (int k = 0; k < 4; k++) {
+                    double f00 = field[4 * (iz * count + ix) + k];
+                    double f10 = field[4 * (iz * count + ix + 1) + k];
+                    double f01 = field[4 * ((iz + 1) * count + ix) + k];
+                    double f11 = field[4 * ((iz + 1) * count + ix + 1) + k];
+                    out[v + k] = (f00 * (1 - u) + f10 * u) * (1 - w) + (f01 * (1 - u) + f11 * u) * w;
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The morph target onto level {@code coarse}'s surface: for each vertex, how far it moves (in height) and how its
+     * normal turns to lie on the coarser tile's triangles with their normals (heights and normals of the coarser
+     * grid, from its own apron, as that tile has them; between its vertices on its two triangles a quad). Skirt
+     * vertices move with the edge vertex they hang from.
+     */
+    float[][] morphDeltas(int level, int coarse, double x0, double z0, float[] positions, float[] normals, int top,
+        int vertices) {
+        int n = grid.quads();
+        double s = grid.spacing(level);
+        double sc = grid.spacing(coarse);
+        int r = 1 << (coarse - level);
+        int m = Math.max(1, n / r); // coarse quads across this tile
+        int a = m + 3;
+        double[] h = new double[a * a];
+        for (int j = 0; j < a; j++) {
+            for (int i = 0; i < a; i++) {
+                h[j * a + i] = surface.height(x0 + (i - 1) * sc, z0 + (j - 1) * sc, sc);
+            }
+        }
+        double[] cn = new double[3 * a * a];
+        for (int j = 1; j < a - 1; j++) {
+            for (int i = 1; i < a - 1; i++) {
+                int c = j * a + i;
+                double dx = (h[c + 1] - h[c - 1]) / (2 * sc);
+                double dz = (h[c + a] - h[c - a]) / (2 * sc);
+                double length = Math.sqrt(dx * dx + 1 + dz * dz);
+                cn[3 * c] = -dx / length;
+                cn[3 * c + 1] = 1 / length;
+                cn[3 * c + 2] = -dz / length;
+            }
+        }
+        float[] dp = new float[3 * vertices];
+        float[] dn = new float[3 * vertices];
+        for (int j = 0; j <= n; j++) {
+            for (int i = 0; i <= n; i++) {
+                double fu = (double) i * s / sc;
+                double fv = (double) j * s / sc;
+                int ci = Math.min((int) Math.floor(fu), m - 1);
+                int cj = Math.min((int) Math.floor(fv), m - 1);
+                double u = fu - ci;
+                double w = fv - cj;
+                int c00 = (cj + 1) * a + ci + 1;
+                int c10 = c00 + 1;
+                int c01 = c00 + a;
+                int c11 = c01 + 1;
+                double b00;
+                double b10;
+                double b01;
+                double b11;
+                if (u + w <= 1) {
+                    b00 = 1 - u - w;
+                    b10 = u;
+                    b01 = w;
+                    b11 = 0;
+                } else {
+                    b00 = 0;
+                    b10 = 1 - w;
+                    b01 = 1 - u;
+                    b11 = u + w - 1;
+                }
+                double hc = b00 * h[c00] + b10 * h[c10] + b01 * h[c01] + b11 * h[c11];
+                double nx = b00 * cn[3 * c00] + b10 * cn[3 * c10] + b01 * cn[3 * c01] + b11 * cn[3 * c11];
+                double ny = b00 * cn[3 * c00 + 1] + b10 * cn[3 * c10 + 1] + b01 * cn[3 * c01 + 1]
+                    + b11 * cn[3 * c11 + 1];
+                double nz = b00 * cn[3 * c00 + 2] + b10 * cn[3 * c10 + 2] + b01 * cn[3 * c01 + 2]
+                    + b11 * cn[3 * c11 + 2];
+                double nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                int v = j * (n + 1) + i;
+                dp[3 * v + 1] = (float) (hc - positions[3 * v + 1]);
+                dn[3 * v] = (float) (nx / nl - normals[3 * v]);
+                dn[3 * v + 1] = (float) (ny / nl - normals[3 * v + 1]);
+                dn[3 * v + 2] = (float) (nz / nl - normals[3 * v + 2]);
+            }
+        }
+        // the skirts' vertices, after the top ones in the order build() lays them: each side's edge in turn
+        int skirt = top;
+        for (int side = 0; skirt < vertices && side < 4; side++) {
+            for (int k = 0; k <= n; k++) {
+                int from = switch (side) {
+                    case 0 -> k;
+                    case 1 -> n * (n + 1) + k;
+                    case 2 -> k * (n + 1);
+                    default -> k * (n + 1) + n;
+                };
+                System.arraycopy(dp, 3 * from, dp, 3 * (skirt + k), 3);
+                System.arraycopy(dn, 3 * from, dn, 3 * (skirt + k), 3);
+            }
+            skirt += n + 1;
+        }
+        return new float[][] {dp, dn};
     }
 }

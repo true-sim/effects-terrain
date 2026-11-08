@@ -113,6 +113,8 @@ final class TerrainRig implements AutoCloseable {
     /** Called each frame after the terrain's update, before the scene's (the films move things). */
     Consumer<TerrainRig> beforeScene = rig -> { };
     private double fovY = Math.toRadians(60);
+    /** The time a frame stands for: what the terrain's level transitions move on by. */
+    double frameSeconds = 1 / 30.0;
     private int lastSlot;
 
     /** A rig of {@code width} x {@code height}, RGBA8 or (with {@code hdr}) half-float color. */
@@ -216,14 +218,24 @@ final class TerrainRig implements AutoCloseable {
 
     /** One frame: loads arrive, the terrain follows the camera, the scene syncs, the graph draws. */
     void frame() {
+        frame(true);
+    }
+
+    /**
+     * One frame; without {@code streaming} the terrain keeps the tiles it shows (neither follows the camera nor
+     * updates), so the same camera can be drawn with the tiles before and after an update.
+     */
+    void frame(boolean streaming) {
         int slot = graph.beginFrame();
         slots.begin(slot);
         tasks.drainCompleted();
         resources.beginFrame();
-        if (terrain != null) {
+        if (terrain != null && !streaming) {
+            world.update();
+        } else if (terrain != null) {
             terrain.follow(camera.position(0), camera.position(1), camera.position(2), fovY, height);
             world.update();
-            terrain.update();
+            terrain.update(frameSeconds);
         } else {
             world.update();
         }
@@ -258,7 +270,7 @@ final class TerrainRig implements AutoCloseable {
 
     /** Whether every tile the world wants is on the GPU and the world loads nothing. */
     boolean allWantedShow() {
-        return terrain.pendingTiles() == 0 && world.loadingCount() == 0;
+        return terrain.pendingTiles() == 0 && world.loadingCount() == 0 && terrain.transitioning() == 0;
     }
 
     /** The last frame's pixels as 0xAARRGGBB (RGBA8 rigs). */
