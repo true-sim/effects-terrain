@@ -69,4 +69,5 @@ EPYC 9V45 and 9V74 (AVX-512) (the tests print the CPU since). CI restores lavapi
 (`MESA_SHADER_CACHE_DIR`) by shard alone: one filled on an AVX-512 runner hands the 7763 instructions it lacks.
 
 **Rule.** The cache's key names the runner's CPU model (`ci.yml`, step `cpu`). Proof: run 42514599944 (shard 2:
-`CPU: AMD EPYC 7763`, SIGILL; shards 3 and 4: 9V45, 9V74, passing) and the runs after the key changed.
+`CPU: AMD EPYC 7763`, SIGILL; shards 3 and 4: 9V45, 9V74, passing); run 42515034244, the key with the CPU: shards 2
+and 3 on EPYC 7763s pass.
