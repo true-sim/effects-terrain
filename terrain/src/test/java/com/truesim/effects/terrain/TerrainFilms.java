@@ -55,7 +55,7 @@ class TerrainFilms {
     private static final int WIDTH = 1280;
     private static final int HEIGHT = 720;
     private static final double FPS = 30;
-    private static final Setting<Float> EV100 = AtmosphereSky.ATMOSPHERE.setting("ev100");
+    static final Setting<Float> EV100 = AtmosphereSky.ATMOSPHERE.setting("ev100");
     /** Stops darker than the automatic exposure: snow, scree and the sky fill these views, which it would make grey. */
     private static final double COMPENSATION = 1.3;
 
@@ -158,7 +158,7 @@ class TerrainFilms {
     }
 
     /** A rig drawing the site under the atmosphere's sky with the sun's cascaded shadows, half-float colour. */
-    private record Sky(TerrainRig rig, Atmosphere atmosphere) {
+    record Sky(TerrainRig rig, Atmosphere atmosphere) {
         static Sky of(TestGpu gpu, int width, int height) {
             TerrainRig rig = new TerrainRig(gpu, width, height, true, true, settings());
             Atmosphere atmosphere = rig.closing(new Atmosphere(rig.device, rig.slots, rig.graph.settings()));

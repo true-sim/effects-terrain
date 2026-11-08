@@ -40,6 +40,15 @@ public final class TerrainSettings {
      */
     public static final Setting<Float> FOLLOW_STEP = Setting.decimal("terrain.followStep", 32, 0, 10_000,
         "metres the camera moves before the terrain's streaming selects tiles anew");
+    /** How long a level transition takes: tiles morph between levels' surfaces over it, seconds (0: switch at once). */
+    public static final Setting<Float> MORPH_SECONDS = Setting.decimal("terrain.morphSeconds", 0.4f, 0, 10,
+        "seconds terrain tiles take to morph from one level's surface to another's");
+    /**
+     * The scale the material's slope and curvature are measured at, metres: the same for every level finer than it, so
+     * the layers do not change with the tiles' level.
+     */
+    public static final Setting<Float> LAYER_SCALE = Setting.decimal("terrain.layerScale", 16, 1, 10_000,
+        "metres over which the terrain material's slope and curvature are measured, the same at every level");
     /** How many tile meshes start building per frame. */
     public static final Setting<Integer> BUILD_BUDGET = Setting.integer("terrain.buildBudget", 32, 1, 100_000,
         "terrain tile meshes asked for per frame at most");
@@ -70,7 +79,7 @@ public final class TerrainSettings {
 
     /** Every terrain setting. */
     public static final List<Setting<?>> ALL = List.of(TILE_SIZE, TILE_QUADS, LEVELS, SCREEN_ERROR, ERROR_SAMPLES, ERROR_SCALE,
-        RANGE, FOLLOW_STEP, BUILD_BUDGET, SKIRTS, SKIRT_MARGIN, DETAIL_AMPLITUDE, DETAIL_WAVELENGTH, DETAIL_OCTAVES,
+        RANGE, FOLLOW_STEP, MORPH_SECONDS, LAYER_SCALE, BUILD_BUDGET, SKIRTS, SKIRT_MARGIN, DETAIL_AMPLITUDE, DETAIL_WAVELENGTH, DETAIL_OCTAVES,
         DETAIL_EROSION, CURVATURE, CURVATURE_SCALE);
 
     private TerrainSettings() {
