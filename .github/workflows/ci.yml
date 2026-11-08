@@ -98,7 +98,8 @@ jobs:
       # lavapipe's cached shaders are machine code for the CPU that compiled them: keyed by the runner's CPU model, so a
       # runner never runs another CPU's code (an AVX-512 runner's cache killed an EPYC 7763's tests with SIGILL)
       - id: cpu
-        run: echo "model=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | tr -cs 'A-Za-z0-9' '-')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "model=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | tr -cs 'A-Za-z0-9' '-')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: .mesa-shader-cache
