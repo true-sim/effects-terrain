@@ -44,7 +44,9 @@ class TerrainShadowsTest {
             }
             rig.output();
             Terrain terrain = rig.terrain(TestSites.rugged(900), TerrainSeamsTest.plain().ref());
-            rig.look(0, terrain.heightAt(0, 0) + 600, 0, 0.3, -0.35, -1);
+            // Down across the valleys, no sky in view: the engine's traced masks rebuild a normal at the horizon from a
+            // sky neighbour (depth 0) into NaN, which GPU-assisted validation reports (docs/pitfalls.md)
+            rig.look(0, terrain.heightAt(0, 0) + 600, 0, 0.3, -0.75, -1);
             rig.settle(400);
             for (int f = 0; f < 6; f++) { // the bottom levels build in frames after their meshes arrive
                 rig.frame();

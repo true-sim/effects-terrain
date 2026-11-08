@@ -71,3 +71,16 @@ EPYC 9V45 and 9V74 (AVX-512) (the tests print the CPU since). CI restores lavapi
 **Rule.** The cache's key names the runner's CPU model (`ci.yml`, step `cpu`). Proof: run 42514599944 (shard 2:
 `CPU: AMD EPYC 7763`, SIGILL; shards 3 and 4: 9V45, 9V74, passing); run 42515034244, the key with the CPU: shards 2
 and 3 on EPYC 7763s pass.
+
+## The engine's traced shadow masks turn a pixel beside the sky into a NaN ray
+
+**What happened.** `TerrainShadowsTest`'s ray-traced case under GPU-assisted validation
+(`TRUESIM_GPU_ASSISTED_VALIDATION=true`, RX 9070 XT) reported 10 errors, `VUID-RuntimeSpirv-OpRayQueryInitializeKHR-06351`
+"[ Debug region: traced shadows ] OpRayQueryInitializeKHR operand Ray Origin contains a NaN", with the view taking in
+the sky above distant mountains; every other test was clean. engine 0.194.0's `shadows/masks.slang` rebuilds a
+pixel's normal from its neighbours nearest in depth (`neighbour`) without leaving out sky neighbours: beside the sky,
+a far surface's small depth is nearest to the sky's 0, `positionAt` divides by a `w` of 0 and the normal, so the ray's
+origin, is NaN (the pixel's own sky test, `pointAt`, does not cover its neighbours).
+
+**Rule.** An engine bug to fix there (skip neighbours whose depth is not above 0); until then the test looks down
+across the valleys, no sky in view. Terrain to the horizon under ray-traced shadows meets it on every frame.
