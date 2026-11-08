@@ -25,6 +25,10 @@ class TerrainShadowsTest {
              TerrainRig rig = new TerrainRig(gpu, 192, 128, false, false, TerrainSeamsTest.small())) {
             if (method == Method.RAY_TRACED) {
                 assumeThat(rig.device.rayTracing()).as("ray tracing on this GPU").isTrue();
+                // engine 0.194.0's traced masks rebuild the view's edge pixels' normals as NaN (docs/pitfalls.md):
+                // GPU-assisted validation reports their rays, core validation does not
+                assumeThat(System.getenv(com.truesim.engine.vulkan.VulkanInstance.GPU_ASSISTED_VARIABLE))
+                    .as("the engine's NaN edge rays under GPU-assisted validation").isNotEqualTo("true");
             }
             rig.lights.directional(0, -0.96f, -0.28f, 0.0f, 3, 3, 2.8f);
             RayTracing rays = null;
@@ -44,9 +48,7 @@ class TerrainShadowsTest {
             }
             rig.output();
             Terrain terrain = rig.terrain(TestSites.rugged(900), TerrainSeamsTest.plain().ref());
-            // Down across the valleys, no sky in view: the engine's traced masks rebuild a normal at the horizon from a
-            // sky neighbour (depth 0) into NaN, which GPU-assisted validation reports (docs/pitfalls.md)
-            rig.look(0, terrain.heightAt(0, 0) + 600, 0, 0.3, -1.6, -1);
+            rig.look(0, terrain.heightAt(0, 0) + 600, 0, 0.3, -0.75, -1);
             rig.settle(400);
             for (int f = 0; f < 6; f++) { // the bottom levels build in frames after their meshes arrive
                 rig.frame();
