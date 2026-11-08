@@ -1,7 +1,6 @@
 package com.truesim.effects.terrain;
 
 import com.truesim.annotations.AllowAllocation;
-import com.truesim.common.math.Maths;
 import com.truesim.effects.terrain.data.LocalFrame;
 import com.truesim.effects.terrain.data.TerrainSurface;
 import com.truesim.scene.assets.Generator;
@@ -70,8 +69,8 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
     }
 
     /**
-     * Measures the slope and curvature the material's layers follow over {@code metres} at every level finer than
-     * that (carried in the colour's alpha and blue), so the layers do not change with the level.
+     * Measures the curvature the material's layers follow over {@code metres} at every level finer than that
+     * (carried in the colour's blue), so the layers do not change with the level.
      */
     public TileMeshes layerScale(double metres) {
         this.layerScale = metres;
@@ -160,13 +159,12 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 split(px0 + i * s, uv0, uv1, 2 * v);
                 split(pz0 + j * s, uv0, uv1, 2 * v + 1);
                 double laplacian = layer[4 * v + 3];
-                double slope = Maths.toDegrees(Maths.acos(Math.clamp(layer[4 * v + 1], -1, 1)));
                 int alt = Math.clamp(Math.round((altitude[c] + 1024) * 8), 0, 65535);
                 colors[4 * v] = (alt >>> 8) / 255f;
                 colors[4 * v + 1] = (alt & 0xff) / 255f;
                 colors[4 * v + 2] = Math.round(255 * (0.5 + 0.5 * Math.clamp(laplacian / curvatureScale, -1, 1)))
                     / 255f;
-                colors[4 * v + 3] = Math.round(255 * Math.clamp(slope / 90, 0, 1)) / 255f;
+                colors[4 * v + 3] = 1;
             }
         }
         // Skirts: a copy of each edge's vertices, `depth` below

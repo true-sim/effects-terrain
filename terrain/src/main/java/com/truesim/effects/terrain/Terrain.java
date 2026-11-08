@@ -89,6 +89,7 @@ public final class Terrain implements AutoCloseable {
     private final ArrayList<Tile> merges = new ArrayList<>();
     private final ArrayList<Tile> scratch = new ArrayList<>();
     private final double[] weight = new double[1];
+    private final double[] slopeNormal = new double[3];
     private final ComponentStore<MorphWeights> morphWeights;
     private long lastUpdate = -1;
     private double cameraX;
@@ -909,8 +910,8 @@ public final class Terrain implements AutoCloseable {
 
     /**
      * The material's layers at ({@code x}, {@code z}) (rock, grass, scree, snow: {@link TerrainLayers}) by the rules
-     * set with {@link #rules}, from the slope and curvature at {@code terrain.layerScale} the tiles carry (the same at
-     * every level), and the finest tiles' altitude, into {@code weights}.
+     * set with {@link #rules}, from the finest tiles' slope and altitude and the curvature at {@code terrain.layerScale}
+     * the tiles carry (the same at every level finer than it), into {@code weights}. Not thread-safe.
      */
     public void layers(double x, double z, double[] weights) {
         double scale = Math.max(settings.get(TerrainSettings.LAYER_SCALE), grid.spacing(0));
@@ -920,7 +921,6 @@ public final class Terrain implements AutoCloseable {
         double iz = Math.floor(fz);
         double u = fx - ix;
         double w = fz - iz;
-        double ny = 0;
         double laplacian = 0;
         for (int k = 0; k < 4; k++) {
             double gx = (ix + (k & 1)) * scale;
@@ -931,15 +931,13 @@ public final class Terrain implements AutoCloseable {
             double hx1 = surface.height(gx + scale, gz, scale);
             double hz0 = surface.height(gx, gz - scale, scale);
             double hz1 = surface.height(gx, gz + scale, scale);
-            double dx = (hx1 - hx0) / (2 * scale);
-            double dz = (hz1 - hz0) / (2 * scale);
-            ny += weight / Math.sqrt(dx * dx + 1 + dz * dz);
             laplacian += weight * (hx0 + hx1 + hz0 + hz1 - 4 * h) / (scale * scale);
         }
-        // the slope of the blended normal's height, as the shader takes it from the interpolated tangent (about)
-        double slope = Maths.toDegrees(Maths.acos(Math.clamp(ny, -1, 1)));
         double curvature = Math.clamp(laplacian / settings.get(TerrainSettings.CURVATURE_SCALE), -1, 1);
         double s0 = grid.spacing(0);
+        double[] normal = slopeNormal;
+        surface.normalAt(x, z, s0, normal);
+        double slope = Maths.toDegrees(Maths.acos(Math.clamp(normal[1], -1, 1)));
         TerrainLayers.weights(rules, surface.height(x, z, s0) + surface.fall(x, z), slope, curvature, weights);
     }
 

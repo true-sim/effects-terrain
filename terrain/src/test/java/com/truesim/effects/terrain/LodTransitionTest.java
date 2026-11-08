@@ -97,7 +97,8 @@ class LodTransitionTest {
 
     @Test
     void levelSwitchesChangeNoBlockMoreThanTheCamerasMotion() throws Exception {
-        Flight morphing = fly(TerrainSettings.MORPH_SECONDS.defaultValue(), 16);
+        // The layers' scale at the defaults' ratio to the finest spacing (16 m over 2 m): 64 m over these tiles' 8 m
+        Flight morphing = fly(TerrainSettings.MORPH_SECONDS.defaultValue(), 64);
         assertThat(morphing.switches()).as("frames whose switching changed something").isPositive();
         assertThat(morphing.worstSwitch()).as("the worst block's change from switching in a frame, against the camera"
             + " motion's %.1f (the worst block's change from frame to frame, 95th percentile)", morphing.steady())

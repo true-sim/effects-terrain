@@ -88,11 +88,12 @@ and grass may grow).
   frame, so only tiles in a transition pay for it. Without per-material displacement in a released engine
   (true-sim/engine#454 is open) this is the engine's way to move a tile's vertices; with it, the morph could run in
   the vertex stage of every tile, by distance, as CDLOD does.
-- **The layers do not follow the level.** The slope and curvature the material's layers follow are measured at
+- **The layers do not jump with the level.** The curvature the material's layers follow is measured at
   `terrain.layerScale` (16 m) on a grid fixed in the world, the same samples at every level finer than that, carried
-  in the vertex colour's alpha and blue: as tiles switch or morph, grass, scree, rock and snow stay where they are.
-  Before, each level measured them at its own spacing, and the layers jumped as the tiles switched: the flicker in
-  the first film (`docs/pitfalls.md`). The procedural detail and the lines' noise are functions of the world
+  in the vertex colour's blue; the slope is the surface's own, which morphs with the tiles' normals. As tiles switch,
+  grass, scree, rock and snow move with the morph instead of jumping. Before, each level measured the curvature at its
+  own spacing and tiles switched at once, and the layers jumped: the flicker in the first film (`docs/pitfalls.md`).
+  Coarser than `terrain.layerScale` (tiles from 2 km, far off) each level still has its own curvature. The procedural detail and the lines' noise are functions of the world
   position, the same at every level; the detail a coarser level leaves out is part of what its tiles morph.
 - **Crack-free seams.** Every tile hangs double-sided skirts from its four edges, as deep as the widest gap its edges
   can have against a tile up to two levels finer or coarser (sampled at the finer spacing), plus `terrain.skirtMargin`
@@ -104,7 +105,7 @@ and grass may grow).
   16384 m) split in high and low float16 halves over UV0 and UV1 (millimetres, continuous across tiles for every
   texture whose repeat divides 16384 m); the altitude in two bytes of the vertex colour (1/8 m, linear between
   vertices since the bytes interpolate apart); the curvature at `terrain.layerScale` (`terrain.curvatureScale`) in its
-  blue, the slope there in its alpha.
+  blue.
 - **Large worlds.** Tiles are nodes at their world positions in doubles; the engine draws every instance relative to
   each view's camera (two floats per axis), so the terrain is as precise 100 km out as at the origin.
 
