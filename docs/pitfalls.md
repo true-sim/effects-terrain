@@ -59,3 +59,14 @@ pixel.
 **Rule.** Not a gap the skirts leave anywhere else: the eye must be in the seam's plane to the precision of a pixel.
 Tests keep the camera off seam planes (`TerrainStreamingTest.LANE`). Proof: run 42513466369's log (the ray's hit at
 z = -0.0 and the tiles there) and its `hole-*.png`.
+
+## lavapipe's shader cache is machine code for the CPU that filled it
+
+**What happened.** CI's shard 2 (`LodPopTest`, `TerrainSeamsTest`) passed four times, then its test JVM died with
+SIGILL (exit 132, no hs_err) three times on one commit whose change touched neither test, 14 s in, right after the
+device came up. The failing runners had an AMD EPYC 7763 (Zen 3, AVX2); the shards that passed in the same run had
+EPYC 9V45 and 9V74 (AVX-512) (the tests print the CPU since). CI restores lavapipe's disk cache of compiled shaders
+(`MESA_SHADER_CACHE_DIR`) by shard alone: one filled on an AVX-512 runner hands the 7763 instructions it lacks.
+
+**Rule.** The cache's key names the runner's CPU model (`ci.yml`, step `cpu`). Proof: run 42514599944 (shard 2:
+`CPU: AMD EPYC 7763`, SIGILL; shards 3 and 4: 9V45, 9V74, passing) and the runs after the key changed.
