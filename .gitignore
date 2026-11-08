@@ -1,0 +1,10 @@
+.gradle/
+/build/
+/*/build/
+.kotlin/
+.idea/
+*.iml
+out/
+.DS_Store
+# Downloaded elevation data and imported terrain: fetched on demand, never committed
+/terrain-cache/

@@ -1,0 +1,81 @@
+# Lauterbrunnen, Bernese Oberland: the village in its U-shaped valley (cliffs of 300-500 m, the Staubbach falls), the
+# Jungfrau, Eiger and Mönch above it, and the Alps out to the horizon. The terrain's local frame: x east, y up, z
+# south, metres, from the village (the church, 46.5937 N, 7.9087 E).
+#
+# site	<id>	<latitude>	<longitude>	<title>
+# source	<id>	<crs>	<pixel>	<blend m>	<crop m>	<title>
+#     crs: EPSG:4326 (geographic) or EPSG:2056 (Swiss LV95); pixel: point or area (where the georeference sits);
+#     sources are listed finest first and blend into the next over <blend> metres from their edge; <crop>: the
+#     radius around the village kept on import (0: all of it).
+# licence	<source>	<text>
+# attribution	<source>	<text>
+# tile	<source>	<id>	<url>	<sha-256>	<bytes>
+site	lauterbrunnen	46.5937	7.9087	Lauterbrunnen, Bernese Oberland, Switzerland
+source	swissalti3d	EPSG:2056	area	150	0	swissALTI3D 2 m (bare ground, 2025), the valley around the village
+source	glo30	EPSG:4326	point	1500	32000	Copernicus DEM GLO-30 (30 m), the region
+source	glo90	EPSG:4326	point	0	125000	Copernicus DEM GLO-90 (90 m), the ring to the horizon
+licence	swissalti3d	Free geodata of the Federal Office of Topography swisstopo (OGD): use, distribution and commercial use allowed with the source named; https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices
+attribution	swissalti3d	Federal Office of Topography swisstopo (swissALTI3D)
+licence	glo30	Copernicus DEM GLO-30 Public licence: free of charge, worldwide, for any purpose including commercial, with the attribution; https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model
+attribution	glo30	produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved
+licence	glo90	Copernicus DEM GLO-90 licence: free of charge, worldwide, for any purpose including commercial, with the attribution; https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model
+attribution	glo90	produced using Copernicus WorldDEM-90 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved
+tile	swissalti3d	2633-1155	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1155/swissalti3d_2025_2633-1155_2_2056_5728.tif	435d7de36a8bd324bd1f7c9a7d7871431db1d94ec0ad48740e295f6b1e0c68e1	1151252
+tile	swissalti3d	2633-1156	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1156/swissalti3d_2025_2633-1156_2_2056_5728.tif	7d12da62ec3bc684f2f527272d572a0b99bd1fe19c48f333a4844123e08b76c2	1154999
+tile	swissalti3d	2633-1157	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1157/swissalti3d_2025_2633-1157_2_2056_5728.tif	6103d9bb21b27d8f203f3e4fb283ddf0cc265b652adfe8ac5c46f400d738c93f	1140454
+tile	swissalti3d	2633-1158	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1158/swissalti3d_2025_2633-1158_2_2056_5728.tif	65a140e7fbead36a1e0cf53dfae782c69e94fbf235a4e9250e0a747f5d7bf2f2	1188530
+tile	swissalti3d	2633-1159	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1159/swissalti3d_2025_2633-1159_2_2056_5728.tif	5df98ebabce0ce9e0fee871db4f7b53b7e06d0bc1529aea3e6248011bfc776fd	1224994
+tile	swissalti3d	2633-1160	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1160/swissalti3d_2025_2633-1160_2_2056_5728.tif	61bced8380c114ae52cafe54b6208d497b97b9b530faac728fc50a5410a360b2	1221693
+tile	swissalti3d	2633-1161	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1161/swissalti3d_2025_2633-1161_2_2056_5728.tif	b795dd04dbe04afdd61c05d8ea21d642313eb7f25e0183c236b3e279ff752f9f	1186787
+tile	swissalti3d	2633-1162	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1162/swissalti3d_2025_2633-1162_2_2056_5728.tif	d4df27450ced11c75cdb8413eeebbd3df2cc2adb79729dbacbe8de3a823bdddc	1249527
+tile	swissalti3d	2633-1163	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2633-1163/swissalti3d_2025_2633-1163_2_2056_5728.tif	39aa5b4d3b37f7df79e59c3cb3ea0e9a1586f048c4f64d8905fca2068f588d5d	1211409
+tile	swissalti3d	2634-1155	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1155/swissalti3d_2025_2634-1155_2_2056_5728.tif	80af5c5dac8d055d80ac2781e9014486ad60df81ac9c20e508c6f968f551afe2	1231835
+tile	swissalti3d	2634-1156	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1156/swissalti3d_2025_2634-1156_2_2056_5728.tif	9b0d74445b4d267d748b6512371f7969ffee7440f28861abacc2ab3d6fa06c12	1187833
+tile	swissalti3d	2634-1157	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1157/swissalti3d_2025_2634-1157_2_2056_5728.tif	70f40e56705237b5252ef216ca8fe2034f5060f8fdd3056e590c18bb084abc60	1176570
+tile	swissalti3d	2634-1158	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1158/swissalti3d_2025_2634-1158_2_2056_5728.tif	da3938c62855dcef5015f72b660d93dfdd544d77b737f3a158a20291ccde59b0	1194749
+tile	swissalti3d	2634-1159	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1159/swissalti3d_2025_2634-1159_2_2056_5728.tif	926b653c5510a6a3eae3a303d28b5f630c15331697e64ed815d504db9df9f60d	1193647
+tile	swissalti3d	2634-1160	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1160/swissalti3d_2025_2634-1160_2_2056_5728.tif	ea9eb4578ef235923943f1530fc1bf678e64547fc03875b24768f3177d1fbb58	1247169
+tile	swissalti3d	2634-1161	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1161/swissalti3d_2025_2634-1161_2_2056_5728.tif	9b74d33c1e794381f95ad8e06263df211e28bb68eb2053746eec763a1093dc3e	1239072
+tile	swissalti3d	2634-1162	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1162/swissalti3d_2025_2634-1162_2_2056_5728.tif	40f128af8cef47ceb3d3c7486f5d4be567553e0e69d1713451276a098e3b7e3d	1221455
+tile	swissalti3d	2634-1163	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2634-1163/swissalti3d_2025_2634-1163_2_2056_5728.tif	c4f95b4d17062c99e4d0eea9ac3afa0aa6d40d17e66feac01e6058ebed998f59	1240525
+tile	swissalti3d	2635-1155	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1155/swissalti3d_2025_2635-1155_2_2056_5728.tif	b3e740a15f0e4db362f831718df5de38699dff8127f124282dd353399f6e25a2	1195898
+tile	swissalti3d	2635-1156	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1156/swissalti3d_2025_2635-1156_2_2056_5728.tif	cb3ae332e929b05d217ea3e411011889a8fcf30e346bb3ac6325e6a3e4f89546	1182880
+tile	swissalti3d	2635-1157	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1157/swissalti3d_2025_2635-1157_2_2056_5728.tif	1af26db4654a7603323ff6725b3a8b5d654e0922efc7544922d14e55affbd7d8	1214961
+tile	swissalti3d	2635-1158	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1158/swissalti3d_2025_2635-1158_2_2056_5728.tif	af968108501e502c78fcd54dd00312b2f3d4d311769e8be3942bf0f7555f3185	1218049
+tile	swissalti3d	2635-1159	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1159/swissalti3d_2025_2635-1159_2_2056_5728.tif	2a06c2af0ab343b405208db1f0df4d209ccf3a78f50013bd38afbc8c71c9457b	1251925
+tile	swissalti3d	2635-1160	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1160/swissalti3d_2025_2635-1160_2_2056_5728.tif	87609f9e5550ab94e781bc38a5d30477a87752fa631ebb4299cb019be73c316f	1256868
+tile	swissalti3d	2635-1161	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1161/swissalti3d_2025_2635-1161_2_2056_5728.tif	879a1cc373f356266a1126d7bf6fbb9c0f7fbe3a25de84f7ca27612551105b9e	1272238
+tile	swissalti3d	2635-1162	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1162/swissalti3d_2025_2635-1162_2_2056_5728.tif	805cb63b0268335989d3cea54b91ebde38d6be242881c24e0d7a1431377b9bdf	1278544
+tile	swissalti3d	2635-1163	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2635-1163/swissalti3d_2025_2635-1163_2_2056_5728.tif	933f46fd8644658a59e745a91432fe0e6e7ba0ce0f8582c97e565c1820ce5994	1276233
+tile	swissalti3d	2636-1155	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1155/swissalti3d_2025_2636-1155_2_2056_5728.tif	d902e1b228d13c2a8e1c3d63c4230f5bfb0a9a57274434c1c8791745baa98800	1273219
+tile	swissalti3d	2636-1156	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1156/swissalti3d_2025_2636-1156_2_2056_5728.tif	3dcadec0a5fb062959c458fe37fe6a29b4cb29ba3fec90886382a238975fbe8e	1280403
+tile	swissalti3d	2636-1157	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1157/swissalti3d_2025_2636-1157_2_2056_5728.tif	8e1650f080e9556689bf1fed56e3bb6cf3799562be618298d88b5314ae35eb24	1182793
+tile	swissalti3d	2636-1158	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1158/swissalti3d_2025_2636-1158_2_2056_5728.tif	da444595b5b818ebb1d3f217884ad843b6e133e23b48cb1adc6c35b291d052f9	1136597
+tile	swissalti3d	2636-1159	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1159/swissalti3d_2025_2636-1159_2_2056_5728.tif	febf9ebbee52043f84dfb7ba790000e4a4b6844b60e27064cf93865e6352ccd8	1169864
+tile	swissalti3d	2636-1160	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1160/swissalti3d_2025_2636-1160_2_2056_5728.tif	77558114b96c8623a93737e960a7ac085452659727679abb6db13d07b2badd0b	1228632
+tile	swissalti3d	2636-1161	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1161/swissalti3d_2025_2636-1161_2_2056_5728.tif	84d7a1d3a45010b556d7cf98663c0de567c257121176933bc5e90efeedef89d1	1241022
+tile	swissalti3d	2636-1162	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1162/swissalti3d_2025_2636-1162_2_2056_5728.tif	66bea4d4e71ba40bdee5596c7618ba5aa648614e102d7081059efc6a57567ba8	1181725
+tile	swissalti3d	2636-1163	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2636-1163/swissalti3d_2025_2636-1163_2_2056_5728.tif	91fa671018ddf0d93827368b787b5f890226fb5bd3af3402da24fdd38fb738c3	1235526
+tile	swissalti3d	2637-1155	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1155/swissalti3d_2025_2637-1155_2_2056_5728.tif	38f1eb0f410b2a1591296821bf86e72e6851a692382392436d49ee5669aed4c4	1160713
+tile	swissalti3d	2637-1156	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1156/swissalti3d_2025_2637-1156_2_2056_5728.tif	7fb6ada8bc48d9e768d26008b3964264cb9c05f7109b9fc55e1e6149c00d1968	1212395
+tile	swissalti3d	2637-1157	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1157/swissalti3d_2025_2637-1157_2_2056_5728.tif	fc1d33c10e9fcdea7fd2dbf550766d6f8544da8ff21eed516502d2421ccd74d8	1183921
+tile	swissalti3d	2637-1158	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1158/swissalti3d_2025_2637-1158_2_2056_5728.tif	0583a6c7bb7c15190115cf3fe326a29d39f142b37ea696895920ebee51bdbebe	1165011
+tile	swissalti3d	2637-1159	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1159/swissalti3d_2025_2637-1159_2_2056_5728.tif	7a8511ead850170e5c53a01dd569bf94a2be31b9bb3f93d7966a6d0dba947f44	1193543
+tile	swissalti3d	2637-1160	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1160/swissalti3d_2025_2637-1160_2_2056_5728.tif	fa3ee0f2a509eb47febf21c61e56d2f0d8cd434af931a2775be4b1d35b1769e0	1175817
+tile	swissalti3d	2637-1161	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1161/swissalti3d_2025_2637-1161_2_2056_5728.tif	f68720f20468cee0fccc3782036687add0fb7a35e0d8b1b65b77afb664a527e2	1183765
+tile	swissalti3d	2637-1162	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1162/swissalti3d_2025_2637-1162_2_2056_5728.tif	ec31588e2751682e4af2f2ed73e7d7f3989a7fa87c26c48d19b2f605da87578c	1229614
+tile	swissalti3d	2637-1163	https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_2025_2637-1163/swissalti3d_2025_2637-1163_2_2056_5728.tif	bb7cfa6eec81a1da863eef66c04a61247085f419080ffcdef67f7cf556bc956f	1213678
+tile	glo30	N46_00_E007_00	https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N46_00_E007_00_DEM/Copernicus_DSM_COG_10_N46_00_E007_00_DEM.tif	426e3d1492d94e4f23d444843f852ff5be675da5c4c14e661b5642006864047d	41776750
+tile	glo30	N46_00_E008_00	https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N46_00_E008_00_DEM/Copernicus_DSM_COG_10_N46_00_E008_00_DEM.tif	47769664394ee1ff3b51f5c1b43a3441d7f7bce8d086d0ed2f3a892b895fae3e	42038015
+tile	glo90	N45_00_E006_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N45_00_E006_00_DEM/Copernicus_DSM_COG_30_N45_00_E006_00_DEM.tif	a002f90ad4b187486930ca502cc8ad67bcf6c65f973e5920702b6d068fc876ce	5249745
+tile	glo90	N45_00_E007_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N45_00_E007_00_DEM/Copernicus_DSM_COG_30_N45_00_E007_00_DEM.tif	a581f2d9539b30e64dce807b9105752689fba3261e0c7ae62602d7f24f1f0d43	5244538
+tile	glo90	N45_00_E008_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N45_00_E008_00_DEM/Copernicus_DSM_COG_30_N45_00_E008_00_DEM.tif	17ef05156ba29d063dfdfc75f015417099cf515e1d1cd0c14fa39c5aa5dfda55	5138554
+tile	glo90	N45_00_E009_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N45_00_E009_00_DEM/Copernicus_DSM_COG_30_N45_00_E009_00_DEM.tif	c897ede243e6ed465f1a5be9b43a3f98ae6a06a45dfbcccab2ec650269a634de	5212138
+tile	glo90	N46_00_E006_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N46_00_E006_00_DEM/Copernicus_DSM_COG_30_N46_00_E006_00_DEM.tif	1a790f6987d5644281c76a92bad2d1997e08170c9912832443f99d1b5ad24bcf	4712364
+tile	glo90	N46_00_E007_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N46_00_E007_00_DEM/Copernicus_DSM_COG_30_N46_00_E007_00_DEM.tif	3528ab5ba11ec63b6fd3dff91736911e69a0af0d87e50c7b61bc259deab9e732	5157813
+tile	glo90	N46_00_E008_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N46_00_E008_00_DEM/Copernicus_DSM_COG_30_N46_00_E008_00_DEM.tif	27f1c6555357b4933eaeda91b39bdfab79a2d4688c6562ca26af374f6e3ab4fc	5230979
+tile	glo90	N46_00_E009_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N46_00_E009_00_DEM/Copernicus_DSM_COG_30_N46_00_E009_00_DEM.tif	6860c0b93a271f3b702a4a16aa885ba19c4907e808c56f94a620c6a657aa5f18	5225729
+tile	glo90	N47_00_E006_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N47_00_E006_00_DEM/Copernicus_DSM_COG_30_N47_00_E006_00_DEM.tif	dc2d4bee6c974402f70949a889453e3f6ffbc32a178388bd9ff859ac247e63e9	5288726
+tile	glo90	N47_00_E007_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N47_00_E007_00_DEM/Copernicus_DSM_COG_30_N47_00_E007_00_DEM.tif	a835078ef2bb7b512586e9c2c53d0e39fb767f3aea5426737c076e33b71203f7	5227136
+tile	glo90	N47_00_E008_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N47_00_E008_00_DEM/Copernicus_DSM_COG_30_N47_00_E008_00_DEM.tif	33952fed93b6d8454bba21d4368ae8bca5b3958ad010e774527524c4bf0349f3	5112967
+tile	glo90	N47_00_E009_00	https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N47_00_E009_00_DEM/Copernicus_DSM_COG_30_N47_00_E009_00_DEM.tif	51f5f20d1a5c8351dd8f8a18e8ae376bf93253c300d95a6e0b54c9fe75640a4c	4879071
