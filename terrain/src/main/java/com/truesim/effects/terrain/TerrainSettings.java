@@ -34,6 +34,12 @@ public final class TerrainSettings {
     /** How far round the camera tiles are loaded, metres. */
     public static final Setting<Float> RANGE = Setting.decimal("terrain.range", 120_000, 100, 10_000_000,
         "how far round the camera terrain tiles load, metres");
+    /**
+     * How far the camera moves before the terrain's interest follows it, metres: the world selects its cells anew only
+     * then (selecting costs the main thread a few milliseconds over a 120 km range).
+     */
+    public static final Setting<Float> FOLLOW_STEP = Setting.decimal("terrain.followStep", 16, 0, 10_000,
+        "metres the camera moves before the terrain's streaming selects tiles anew");
     /** How many tile meshes start building per frame. */
     public static final Setting<Integer> BUILD_BUDGET = Setting.integer("terrain.buildBudget", 32, 1, 100_000,
         "terrain tile meshes asked for per frame at most");
@@ -64,7 +70,7 @@ public final class TerrainSettings {
 
     /** Every terrain setting. */
     public static final List<Setting<?>> ALL = List.of(TILE_SIZE, TILE_QUADS, LEVELS, SCREEN_ERROR, ERROR_SAMPLES, ERROR_SCALE,
-        RANGE, BUILD_BUDGET, SKIRTS, SKIRT_MARGIN, DETAIL_AMPLITUDE, DETAIL_WAVELENGTH, DETAIL_OCTAVES,
+        RANGE, FOLLOW_STEP, BUILD_BUDGET, SKIRTS, SKIRT_MARGIN, DETAIL_AMPLITUDE, DETAIL_WAVELENGTH, DETAIL_OCTAVES,
         DETAIL_EROSION, CURVATURE, CURVATURE_SCALE);
 
     private TerrainSettings() {

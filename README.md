@@ -114,8 +114,29 @@ one level: flat meshes), built from the pool's quantized positions in the frames
 never refitted (terrain is static), and removed with the mesh; the top level holds every tile shown (tested: its
 instance count is the shown tiles'). Traced shadows, global illumination's probes and cascades and the reference path
 tracer see the terrain as drawn. A bottom level per tile keeps builds small and lets tiles stream; a level's coarser
-tiles replace finer ones in the top level as they do on screen. Rough numbers for Lauterbrunnen at the defaults: 300
-to 450 tiles shown, about 9,200 triangles each (with skirts), compacted bottom levels of about 0.3 MiB a tile.
+tiles replace finer ones in the top level as they do on screen. The cost is memory: over Lauterbrunnen's valley floor
+1,554 tiles show and their bottom levels take 820 MiB (0.45 MiB a tile of 9,216 triangles). Not built: bottom levels
+from a coarser grid for far tiles (a separate, smaller mesh per tile for rays), which would cut that by about 4x per
+level of coarsening.
+
+## What it costs
+
+`TerrainBenchmark` (`TRUESIM_BENCHMARK=true`; RX 9070 XT, 1920 x 1080, Lauterbrunnen at the defaults, the sun's four
+2048 cascades, JaCoCo off; medians of 120 frames after 60, from the frame graph's timestamps; 2026-11-08). The frames
+include the test's read-back of the colour (0.28-0.30 ms).
+
+| View | Tiles shown (level 0 ... 7) | Meshlets | Visibility buffer | Forward |
+|---|---|---|---|---|
+| valley floor, 25 m up, along the valley | 1,554 (464, 220, 104, 45, 193, 150, 201, 177) | 44,030 | 1.37 ms (IDs 0.38, shading 0.46) | 2.37 ms (meshlets 1.84) |
+| 3,500 m, to the horizon | 1,161 (160, 100, 137, 89, 151, 158, 201, 165) | 17,325 | 0.90 ms (IDs 0.15, shading 0.27) | 1.20 ms (meshlets 0.70) |
+| valley floor, the sun ray traced | 1,554, every one in the top level | | 1.46 ms | |
+
+The flight of the films in real time (26 s at 30 frames a second, up to 1,857 tiles shown, at most 20 waiting for
+their mesh at once): GPU 1.14 ms a frame (p99 2.5). The main thread's world update took 5.8 ms a frame (p99 15.6)
+when the interest moved every frame: scene-world's selection over 120 km and 9 levels; the terrain's own update 0.21 ms
+(p99 5.5, the frames holding many new meshes). The interest now follows the camera in steps of
+`terrain.followStep` (16 m). Many level-0 tiles come from the valley's cliffs: their own error keeps them split out to a
+few kilometres (`docs/pitfalls.md`).
 
 ## Settings
 

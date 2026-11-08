@@ -201,7 +201,13 @@ public final class Terrain implements AutoCloseable {
             newSource(error, scale, range, projection);
         }
         source.setView(fovY, viewportHeight);
-        source.moveTo(x, y, z);
+        double step = settings.get(TerrainSettings.FOLLOW_STEP);
+        double dx = x - source.x();
+        double dy = y - source.y();
+        double dz = z - source.z();
+        if (dx * dx + dy * dy + dz * dz >= step * step) {
+            source.moveTo(x, y, z); // the world selects anew only when the camera has moved a step
+        }
         cameraX = x;
         cameraY = y;
         cameraZ = z;
