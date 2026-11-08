@@ -56,6 +56,8 @@ class TerrainFilms {
     private static final int HEIGHT = 720;
     private static final double FPS = 30;
     private static final Setting<Float> EV100 = AtmosphereSky.ATMOSPHERE.setting("ev100");
+    /** Stops darker than the automatic exposure: snow, scree and the sky fill these views, which it would make grey. */
+    private static final double COMPENSATION = 1.3;
 
     /** The colours of the levels, finest first. */
     static final Color[] LEVELS = {new Color(0.85, 0.15, 0.15, 1), new Color(0.95, 0.55, 0.1, 1),
@@ -234,7 +236,7 @@ class TerrainFilms {
                             rgb[3 * i + 1] = (byte) tone(color[3 * i + 1]);
                             rgb[3 * i + 2] = (byte) tone(color[3 * i + 2]);
                         }
-                        double target = AtmosphereExposure.ev100(Math.exp(logSum / (WIDTH * HEIGHT)));
+                        double target = AtmosphereExposure.ev100(Math.exp(logSum / (WIDTH * HEIGHT))) + COMPENSATION;
                         ev = f == 0 ? target : AtmosphereExposure.adapt(ev, target, 1 / FPS, 0.6);
                         out.write(rgb);
                         if (f % 60 == 0) {
@@ -295,7 +297,7 @@ class TerrainFilms {
                                 rgb[o + 2] = (byte) tone(color[3 * i + 2]);
                             }
                         }
-                        double target = AtmosphereExposure.ev100(Math.exp(logSum / (half * HEIGHT)));
+                        double target = AtmosphereExposure.ev100(Math.exp(logSum / (half * HEIGHT))) + COMPENSATION;
                         ev = f == 0 ? target : AtmosphereExposure.adapt(ev, target, 1 / FPS, 0.6);
                         map(frame, rig, terrain, half, f / FPS);
                         for (int y = 0; y < HEIGHT; y++) {

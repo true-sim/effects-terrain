@@ -22,7 +22,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * and forward shading, the sun's four cascades, the defaults (128 m tiles of 64 quads, 9 levels, 2 px, 120 km), from
  * the valley floor and from 3,500 m looking to the horizon; GPU time per frame and by pass (the frame graph's
  * timestamps), the tiles and triangles shown; then the films' flight in real time (30 frames a second of camera
- * motion), the main thread's terrain and world updates per frame, tiles built in the background, holes; and ray
+ * motion), the main thread's world, terrain, scene and sync updates per frame, tiles waiting; and ray
  * tracing's bottom levels. Medians over 120 frames after 60.
  */
 @EnabledIfEnvironmentVariable(named = "TRUESIM_BENCHMARK", matches = "true")
@@ -110,10 +110,12 @@ class TerrainBenchmark {
             rig.settle(600);
             rig.graph.timings(true);
             List<Double> update = new ArrayList<>();
+            List<Double> worldUpdate = new ArrayList<>();
+            List<Double> terrainUpdate = new ArrayList<>();
+            List<Double> sceneSync = new ArrayList<>();
             List<Double> gpuFrames = new ArrayList<>();
             int maxPending = 0;
             int maxShown = 0;
-            int holes = 0;
             long start = System.nanoTime();
             int frames = 26 * 30;
             for (int f = 0; f <= frames; f++) {
@@ -126,11 +128,17 @@ class TerrainBenchmark {
                 long t1 = System.nanoTime();
                 terrain.follow(rig.camera.position(0), rig.camera.position(1), rig.camera.position(2), rig.fovY(),
                     HEIGHT);
+                long tw = System.nanoTime();
                 rig.world.update();
+                long tt = System.nanoTime();
                 terrain.update();
                 long t2 = System.nanoTime();
                 rig.scene.update();
                 rig.sync.update();
+                long t3 = System.nanoTime();
+                worldUpdate.add((tt - tw) / 1e6);
+                terrainUpdate.add((t2 - tt) / 1e6);
+                sceneSync.add((t3 - t2) / 1e6);
                 rig.view.set(1, com.truesim.engine.render.MeshletRenderer.MODE_LIT);
                 rig.graph.submit(0, 0);
                 rig.slots.end();
@@ -146,15 +154,14 @@ class TerrainBenchmark {
                 if (wait > 0) {
                     Thread.sleep(wait / 1_000_000, (int) (wait % 1_000_000));
                 }
-                if (f % 30 == 0) {
-                    holes += rig.background(rig.argb()) > 0 ? 1 : 0;
-                }
             }
             System.out.printf(Locale.ROOT, "BENCH flight (%.1f s): terrain + world update median %.3f ms, p99 %.3f ms,"
-                + " max %.3f ms; GPU frame median %.3f ms, p99 %.3f; up to %d tiles shown, up to %d waiting for their"
-                + " mesh; seconds with a hole %d of 27%n", (System.nanoTime() - start) / 1e9, median(update),
-                percentile(update, 0.99), percentile(update, 1), median(gpuFrames), percentile(gpuFrames, 0.99),
-                maxShown, maxPending, holes);
+                + " max %.3f ms (world %.3f / p99 %.3f, terrain %.3f / p99 %.3f; scene and sync after %.3f / p99 %.3f);"
+                + " GPU frame median %.3f ms, p99 %.3f; up to %d tiles shown, up to %d waiting for their mesh%n",
+                (System.nanoTime() - start) / 1e9, median(update), percentile(update, 0.99), percentile(update, 1),
+                median(worldUpdate), percentile(worldUpdate, 0.99), median(terrainUpdate),
+                percentile(terrainUpdate, 0.99), median(sceneSync), percentile(sceneSync, 0.99), median(gpuFrames),
+                percentile(gpuFrames, 0.99), maxShown, maxPending);
         }
     }
 
