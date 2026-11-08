@@ -4,13 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.truesim.engine.settings.EngineSettings;
 import com.truesim.engine.vulkan.testing.TestGpu;
+import com.truesim.testing.AllocationAssertions;
 import org.junit.jupiter.api.Test;
 
 /**
  * Streaming by distance through the scene's world: the finest tiles load under the camera and only there, the far
  * ground is coarse; moving the camera 6 km loads the finest tiles under it and unloads those it left (their nodes
  * removed, their meshes let go of), with no more tiles held than before; and while it flies, every frame shows the
- * ground whole: no tile goes before what replaces it shows. Validated.
+ * ground whole: no tile goes before what replaces it shows; a still camera's frame allocates nothing. Validated.
  */
 class TerrainStreamingTest {
 
@@ -50,6 +51,14 @@ class TerrainStreamingTest {
             assertThat(rig.resources.mesh(firstMesh)).as("its mesh let go of").isNegative();
             assertThat(terrain.heldTiles()).as("tiles held, against %d before", held).isBetween(held / 2, held * 3 / 2);
             assertThat(terrain.heldTiles()).as("held: what is wanted").isEqualTo(terrain.wantedTiles());
+            // A frame of a still camera: the terrain's part allocates nothing
+            double cx = rig.camera.position(0);
+            double cy = rig.camera.position(1);
+            double cz = rig.camera.position(2);
+            AllocationAssertions.assertAllocationFree(() -> {
+                terrain.follow(cx, cy, cz, rig.fovY(), 64);
+                terrain.update();
+            });
         }
     }
 }

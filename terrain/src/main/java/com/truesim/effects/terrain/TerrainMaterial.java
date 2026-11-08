@@ -76,6 +76,7 @@ public final class TerrainMaterial {
         return builder.build();
     }
 
+    @AllowAllocation("material data, made rarely")
     private static void layer(MaterialData.Builder builder, String name, Layer layer) {
         builder.set(name + "Size", snap(layer.size()));
         if (layer.albedo() != null) {

@@ -11,8 +11,8 @@ import com.truesim.scene.assets.mesh.VertexFormat;
 import com.truesim.scene.meshbuild.MeshBuilder;
 
 /**
- * Builds a terrain tile's mesh from the surface, as a generated asset ({@link #ref}): a grid of the tile's quads at its
- * level's spacing (two triangles a quad, split from the (+x, -z) corner to the (-x, +z) one, as the CPU queries
+ * Builds a terrain tile's mesh from the surface, as a generated asset ({@link Terrain#mesh}): a grid of the tile's
+ * quads at its level's spacing (two triangles a quad, split from the (+x, -z) corner to the (-x, +z) one, as the CPU queries
  * interpolate), its vertices sampled at that footprint, normals and curvature from the neighbouring samples (an apron
  * one sample wide, so a tile needs nothing of its neighbours), and skirts hanging from its four edges, double-sided,
  * as deep as the widest gap the edge can have against a tile up to two levels finer or coarser plus a margin: the
