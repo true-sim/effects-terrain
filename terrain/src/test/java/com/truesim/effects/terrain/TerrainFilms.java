@@ -76,13 +76,13 @@ class TerrainFilms {
      */
     static final List<Key> FLIGHT = List.of(
         new Key(0, -120, 25, 500, 150, 120, 3500),
-        new Key(5, -60, 60, 1700, 600, 400, 5200),
-        new Key(10, 300, 420, 2900, 4100, 2600, 6300),
-        new Key(15, 1700, 1500, 2600, 6000, 1500, -1500),
-        new Key(20, 3600, 2500, 700, 9000, 1200, -9000),
-        new Key(26, 5200, 3600, -2400, 30000, 600, -40000));
+        new Key(7, -60, 60, 1700, 600, 400, 5200),
+        new Key(12, 300, 420, 2900, 4100, 2600, 6300),
+        new Key(17, 1700, 1500, 2600, 6000, 1500, -1500),
+        new Key(22, 3600, 2500, 700, 9000, 1200, -9000),
+        new Key(28, 5200, 3600, -2400, 30000, 600, -40000));
 
-    private static final double DURATION = 26;
+    private static final double DURATION = 28;
 
     /** Catmull-Rom between the keys at time {@code t}: {position, look-at}. */
     static double[] at(double t) {
@@ -322,8 +322,8 @@ class TerrainFilms {
     }
 
     /**
-     * {@code terrain-switch-compare.mp4}: the flight's first seconds, low over the slope under the cliffs where the
-     * tiles switch levels most, slowed four times, as the terrain was (left: switching at once, each level's layers
+     * {@code terrain-switch-compare.mp4}: two moments of the flight where tiles switched levels most (the first film's
+     * worst switches, at 8.7 and 12.7 s of its quicker start), slowed eight times, as the terrain was (left: switching at once, each level's layers
      * following its own slope and curvature) and as it is (right: tiles morphing between levels, layers at
      * {@code terrain.layerScale}), at one exposure.
      */
@@ -333,14 +333,21 @@ class TerrainFilms {
         Path dir = Path.of(System.getProperty("truesim.screenshots", "build/films"));
         Files.createDirectories(dir);
         int half = WIDTH / 2;
-        double from = 1.0;
-        double to = 3.4;
-        int slow = 4;
+        double[][] windows = {{10.2, 10.9}, {14.3, 14.9}}; // where the flight switched most, the first film's 8.7 and 12.7 s
+        int slow = 8;
         EngineSettings before = settings();
         before.set(TerrainSettings.MORPH_SECONDS, 0f);
         before.set(TerrainSettings.LAYER_SCALE, 1f);
-        List<byte[]> left = segment(before, half, from, to, slow);
-        List<byte[]> right = segment(settings(), half, from, to, slow);
+        List<byte[]> left = new ArrayList<>();
+        List<byte[]> right = new ArrayList<>();
+        List<Double> times = new ArrayList<>();
+        for (double[] window : windows) {
+            left.addAll(segment(before, half, window[0], window[1], slow));
+            right.addAll(segment(settings(), half, window[0], window[1], slow));
+            for (int f = 0; f < Math.round((window[1] - window[0]) * FPS * slow); f++) {
+                times.add(window[0] + f / (FPS * slow));
+            }
+        }
         Process ffmpeg = ffmpeg(dir.resolve("terrain-switch-compare.mp4"), WIDTH, HEIGHT, 20);
         BufferedImage frame = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
         byte[] rgb = new byte[3 * WIDTH * HEIGHT];
@@ -364,8 +371,7 @@ class TerrainFilms {
                 g.setColor(java.awt.Color.WHITE);
                 g.drawString("before: switch at once, layers per level", 14, 23);
                 g.drawString("after: morphing levels, layers at one scale", half + 14, 23);
-                g.drawString(String.format(Locale.ROOT, "%.2f s, slowed %dx", from + f / (FPS * slow), slow), 14,
-                    HEIGHT - 14);
+                g.drawString(String.format(Locale.ROOT, "%.3f s, slowed %dx", times.get(f), slow), 14, HEIGHT - 14);
                 g.fillRect(half - 1, 0, 2, HEIGHT);
                 g.dispose();
                 for (int y = 0; y < HEIGHT; y++) {
