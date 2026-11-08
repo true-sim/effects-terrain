@@ -85,9 +85,11 @@ and grass may grow).
   tile in their place. The morph is a morph target of a second mesh of the tile (`TileMeshes.TileMesh(key, level)`,
   asked for when the transition is due, held while it runs: it starts once every tile of it has its morphing mesh on
   the GPU), weighted through the node's `MorphWeights`; the engine draws such a tile as a deformed copy, posed each
-  frame, so only tiles in a transition pay for it. Without per-material displacement in a released engine
-  (true-sim/engine#454 is open) this is the engine's way to move a tile's vertices; with it, the morph could run in
-  the vertex stage of every tile, by distance, as CDLOD does.
+  frame, so only tiles in a transition pay for it. Engine 0.197.0's per-material displacement (true-sim/engine#454)
+  could run the morph in every tile's vertex stage instead, by distance, as CDLOD does, but not yet here: a morph
+  moves a height and turns the normal (three values a vertex) while a tile's vertex channels are all taken (planar
+  position high and low, altitude, curvature), the camera would have to reach the hook, and geometry displaced in
+  the raster stage is not what the rays and the shadows see.
 - **The layers do not jump with the level.** The curvature the material's layers follow is measured at
   `terrain.layerScale` (16 m) on a grid fixed in the world, the same samples at every level finer than that, carried
   in the vertex colour's blue; the slope is the surface's own, which morphs with the tiles' normals. As tiles switch,
@@ -158,6 +160,12 @@ every frame. Alone on the CPU (no GPU, the same bands, about 1,000 cells), one s
 and 137 km of bands, scene-world's own cost. The interest follows in steps of `terrain.followStep` (32 m by default),
 so the selection runs a few times a second in flight. Many level-0 tiles come from the valley's cliffs: their own
 error keeps them split out to a few kilometres.
+
+The level transitions, measured back to back with the code before them on a GPU shared with other renders (so the
+absolute figures run above the ones above): up to 43 transitions at once on the flight; GPU 1.45 to 1.56 ms a frame
+against 1.29 (the morphing tiles' deformed copies); the terrain's update 0.31 to 0.35 ms against 0.22 (p99 13.4 to
+14.1 against 6.2, the frames that start many transitions); the scene's and sync's 0.10 to 0.11 against 0.05 (posing
+the morphing tiles).
 
 ## Settings
 
