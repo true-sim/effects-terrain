@@ -160,7 +160,11 @@ class TerrainFilms {
     /** A rig drawing the site under the atmosphere's sky with the sun's cascaded shadows, half-float colour. */
     record Sky(TerrainRig rig, Atmosphere atmosphere) {
         static Sky of(TestGpu gpu, int width, int height) {
-            TerrainRig rig = new TerrainRig(gpu, width, height, true, true, settings());
+            return of(gpu, width, height, settings());
+        }
+
+        static Sky of(TestGpu gpu, int width, int height, EngineSettings settings) {
+            TerrainRig rig = new TerrainRig(gpu, width, height, true, true, settings);
             Atmosphere atmosphere = rig.closing(new Atmosphere(rig.device, rig.slots, rig.graph.settings()));
             Environment environment = Environment.uniform("atmosphere", 0, 0, 0);
             SkyCapture capture = rig.closing(new SkyCapture(atmosphere, environment, rig.textures));
@@ -315,6 +319,105 @@ class TerrainFilms {
                 assertThat(ffmpeg.waitFor()).as("ffmpeg").isZero();
             }
         }
+    }
+
+    /**
+     * {@code terrain-switch-compare.mp4}: the flight's first seconds, low over the slope under the cliffs where the
+     * tiles switch levels most, slowed four times, as the terrain was (left: switching at once, each level's layers
+     * following its own slope and curvature) and as it is (right: tiles morphing between levels, layers at
+     * {@code terrain.layerScale}), at one exposure.
+     */
+    @Test
+    void switchComparison() throws Exception {
+        assumeThat(TestSites.lauterbrunnen()).as("the Lauterbrunnen site imported into the terrain cache").isNotNull();
+        Path dir = Path.of(System.getProperty("truesim.screenshots", "build/films"));
+        Files.createDirectories(dir);
+        int half = WIDTH / 2;
+        double from = 1.0;
+        double to = 3.4;
+        int slow = 4;
+        EngineSettings before = settings();
+        before.set(TerrainSettings.MORPH_SECONDS, 0f);
+        before.set(TerrainSettings.LAYER_SCALE, 1f);
+        List<byte[]> left = segment(before, half, from, to, slow);
+        List<byte[]> right = segment(settings(), half, from, to, slow);
+        Process ffmpeg = ffmpeg(dir.resolve("terrain-switch-compare.mp4"), WIDTH, HEIGHT, 20);
+        BufferedImage frame = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
+        byte[] rgb = new byte[3 * WIDTH * HEIGHT];
+        try (OutputStream out = ffmpeg.getOutputStream()) {
+            for (int f = 0; f < Math.min(left.size(), right.size()); f++) {
+                for (int y = 0; y < HEIGHT; y++) {
+                    System.arraycopy(left.get(f), 3 * y * half, rgb, 3 * y * WIDTH, 3 * half);
+                    System.arraycopy(right.get(f), 3 * y * half, rgb, 3 * (y * WIDTH + half), 3 * half);
+                }
+                for (int y = 0; y < HEIGHT; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int o = 3 * (y * WIDTH + x);
+                        frame.setRGB(x, y, (rgb[o] & 0xff) << 16 | (rgb[o + 1] & 0xff) << 8 | (rgb[o + 2] & 0xff));
+                    }
+                }
+                Graphics2D g = frame.createGraphics();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+                g.setColor(new java.awt.Color(0, 0, 0, 140));
+                g.fillRect(0, 0, WIDTH, 34);
+                g.setColor(java.awt.Color.WHITE);
+                g.drawString("before: switch at once, layers per level", 14, 23);
+                g.drawString("after: morphing levels, layers at one scale", half + 14, 23);
+                g.drawString(String.format(Locale.ROOT, "%.2f s, slowed %dx", from + f / (FPS * slow), slow), 14,
+                    HEIGHT - 14);
+                g.fillRect(half - 1, 0, 2, HEIGHT);
+                g.dispose();
+                for (int y = 0; y < HEIGHT; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int c = frame.getRGB(x, y);
+                        int o = 3 * (y * WIDTH + x);
+                        rgb[o] = (byte) (c >> 16);
+                        rgb[o + 1] = (byte) (c >> 8);
+                        rgb[o + 2] = (byte) c;
+                    }
+                }
+                out.write(rgb);
+            }
+        }
+        assertThat(ffmpeg.waitFor()).as("ffmpeg").isZero();
+    }
+
+    /** The flight from {@code from} to {@code to} seconds, slowed {@code slow} times, as RGB frames {@code width} wide. */
+    private static List<byte[]> segment(EngineSettings settings, int width, double from, double to, int slow)
+        throws Exception {
+        List<byte[]> frames = new ArrayList<>();
+        try (TestGpu gpu = TestGpu.open()) {
+            Sky sky = Sky.of(gpu, width, HEIGHT, settings);
+            try (TerrainRig rig = sky.rig()) {
+                Terrain terrain = rig.terrain(load(rig), alpine().ref());
+                rig.fov(Math.toRadians(55));
+                rig.frameSeconds = 1 / (FPS * slow);
+                rig.graph.settings().set(EV100, 11.2f);
+                place(rig, terrain, from - 1);
+                rig.settle(400);
+                for (double t = from - 1; t < from; t += 1 / FPS) { // the flight's last second at full speed first
+                    place(rig, terrain, t);
+                    rig.frameSeconds = 1 / FPS;
+                    step(rig, terrain);
+                }
+                rig.frameSeconds = 1 / (FPS * slow);
+                int count = (int) Math.round((to - from) * FPS * slow);
+                for (int f = 0; f < count; f++) {
+                    place(rig, terrain, from + f / (FPS * slow));
+                    rig.frame();
+                    float[] color = rig.rgb();
+                    byte[] rgb = new byte[3 * width * HEIGHT];
+                    for (int i = 0; i < width * HEIGHT; i++) {
+                        rgb[3 * i] = (byte) tone(color[3 * i]);
+                        rgb[3 * i + 1] = (byte) tone(color[3 * i + 1]);
+                        rgb[3 * i + 2] = (byte) tone(color[3 * i + 2]);
+                    }
+                    frames.add(rgb);
+                }
+            }
+        }
+        return frames;
     }
 
     /**

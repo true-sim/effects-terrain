@@ -1,6 +1,7 @@
 package com.truesim.effects.terrain;
 
 import com.truesim.annotations.AllowAllocation;
+import com.truesim.common.math.Maths;
 import com.truesim.effects.terrain.data.LocalFrame;
 import com.truesim.effects.terrain.data.TerrainSurface;
 import com.truesim.scene.assets.Generator;
@@ -32,8 +33,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
     public record TileMesh(long key, int morphTo) {
     }
 
-    private static final VertexFormat FORMAT = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.TANGENT,
-        VertexAttribute.UV0,
+    private static final VertexFormat FORMAT = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.UV0,
         VertexAttribute.UV1, VertexAttribute.COLOR);
 
     private final TerrainSurface surface;
@@ -71,7 +71,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
 
     /**
      * Measures the slope and curvature the material's layers follow over {@code metres} at every level finer than
-     * that (carried in the tangent and the colour's blue), so the layers do not change with the level.
+     * that (carried in the colour's alpha and blue), so the layers do not change with the level.
      */
     public TileMeshes layerScale(double metres) {
         this.layerScale = metres;
@@ -140,7 +140,6 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         float[] uv0 = new float[2 * vertices];
         float[] uv1 = new float[2 * vertices];
         float[] colors = new float[4 * vertices];
-        float[] tangents = new float[4 * vertices];
         double[] layer = layerField(level, x0, z0, height, a);
         double px0 = Math.floorMod((long) x0, (long) TerrainGrid.PLANAR_PERIOD) + (x0 - Math.floor(x0));
         double pz0 = Math.floorMod((long) z0, (long) TerrainGrid.PLANAR_PERIOD) + (z0 - Math.floor(z0));
@@ -161,16 +160,13 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 split(px0 + i * s, uv0, uv1, 2 * v);
                 split(pz0 + j * s, uv0, uv1, 2 * v + 1);
                 double laplacian = layer[4 * v + 3];
-                tangents[4 * v] = (float) layer[4 * v];
-                tangents[4 * v + 1] = (float) layer[4 * v + 1];
-                tangents[4 * v + 2] = (float) layer[4 * v + 2];
-                tangents[4 * v + 3] = 1;
+                double slope = Maths.toDegrees(Maths.acos(Math.clamp(layer[4 * v + 1], -1, 1)));
                 int alt = Math.clamp(Math.round((altitude[c] + 1024) * 8), 0, 65535);
                 colors[4 * v] = (alt >>> 8) / 255f;
                 colors[4 * v + 1] = (alt & 0xff) / 255f;
                 colors[4 * v + 2] = Math.round(255 * (0.5 + 0.5 * Math.clamp(laplacian / curvatureScale, -1, 1)))
                     / 255f;
-                colors[4 * v + 3] = 1;
+                colors[4 * v + 3] = Math.round(255 * Math.clamp(slope / 90, 0, 1)) / 255f;
             }
         }
         // Skirts: a copy of each edge's vertices, `depth` below
@@ -209,7 +205,6 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 System.arraycopy(uv0, 2 * from, uv0, 2 * v, 2);
                 System.arraycopy(uv1, 2 * from, uv1, 2 * v, 2);
                 System.arraycopy(colors, 4 * from, colors, 4 * v, 4);
-                System.arraycopy(tangents, 4 * from, tangents, 4 * v, 4);
             }
             for (int k = 0; k < n; k++) {
                 int a0 = edge[k];
@@ -240,8 +235,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         }
         infos.put(key, new Info(TerrainError.tile(surface, grid, key), low, high));
         MeshBuilder builder = new MeshBuilder(FORMAT, vertices).pool(pool).positions(positions)
-            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.TANGENT, tangents)
-            .attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
+            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
             .attribute(VertexAttribute.COLOR, colors).submesh(indices);
         if (morphTo > level) {
             float[][] deltas = morphDeltas(level, morphTo, x0, z0, positions, normals, top, vertices);

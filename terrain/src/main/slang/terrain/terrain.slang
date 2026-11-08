@@ -8,9 +8,7 @@
 //   COLOR.rg   the altitude above sea level (without the curvature's fall): (r * 255 * 256 + g * 255) / 8 - 1024
 //              metres, linear between vertices because the two bytes interpolate apart.
 //   COLOR.b    the curvature at terrain.layerScale: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave).
-//   TANGENT    the surface's normal at terrain.layerScale (not a tangent: the layers' slope, the same at every
-//              level, so they do not change as tiles switch levels; morphing leaves it as it is).
-//   COLOR.a    unused (1).
+//   COLOR.a    the slope at terrain.layerScale, degrees / 90: what the layers follow, the same at every level.
 //
 // The CPU twin of the layer rules is effects-terrain's TerrainLayers: keep them in step.
 module terrain;
@@ -149,10 +147,9 @@ public struct TerrainType : IMaterial
         float ny = max(abs(n.y), 0.08);
         float dAltX = -(n.x * dxz.x + n.z * dxz.y) / ny;
         float dAltY = -(n.x * dyz.x + n.z * dyz.y) / ny;
-        // The slope the layers follow: the tiles' normal at terrain.layerScale (in the tangent), the same at every
-        // level, so layers do not change as tiles switch levels; the geometry's own normal where it is missing
-        float3 slopeNormal = dot(in.tangent.xyz, in.tangent.xyz) > 1e-6 ? normalize(in.tangent.xyz) : n;
-        float slope = degrees(acos(clamp(slopeNormal.y, -1.0, 1.0)));
+        // The slope the layers follow: measured at terrain.layerScale (the colour's alpha, 0 to 90 degrees), the same
+        // at every level, so layers do not change as tiles switch levels or morph
+        float slope = in.color.a * 90.0;
         float noise = valueNoise(xz, 16) * 0.65 + valueNoise(xz, 4) * 0.35;
         float4 w = terrainLayers(p, altitude, slope, curvature, (noise - 0.5) * 2 * p.jitter);
 

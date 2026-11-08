@@ -79,6 +79,21 @@ and grass may grow).
   wanted tile on the GPU shows; otherwise its finer tiles show if together they cover it, otherwise what showed there
   stays (a coarser tile or finer ones) until its replacement can show whole; a tile no wanted tile overlaps goes. Nodes
   are made and removed in the same frame, so the ground shows whole in every frame of a flight (tested).
+- **Levels morph, never pop.** A switch is a transition over `terrain.morphSeconds` (0.6 s), eased: a split shows the
+  finer tiles morphed exactly onto the coarser tile's surface (its triangles, heights and normals, skirts with them)
+  in place of it, then unmorphs them; a merge morphs the finer tiles onto the coarser surface, then shows the coarser
+  tile in their place. The morph is a morph target of a second mesh of the tile (`TileMeshes.TileMesh(key, level)`,
+  asked for when the transition is due, held while it runs: it starts once every tile of it has its morphing mesh on
+  the GPU), weighted through the node's `MorphWeights`; the engine draws such a tile as a deformed copy, posed each
+  frame, so only tiles in a transition pay for it. Without per-material displacement in a released engine
+  (true-sim/engine#454 is open) this is the engine's way to move a tile's vertices; with it, the morph could run in
+  the vertex stage of every tile, by distance, as CDLOD does.
+- **The layers do not follow the level.** The slope and curvature the material's layers follow are measured at
+  `terrain.layerScale` (16 m) on a grid fixed in the world, the same samples at every level finer than that, carried
+  in the vertex colour's alpha and blue: as tiles switch or morph, grass, scree, rock and snow stay where they are.
+  Before, each level measured them at its own spacing, and the layers jumped as the tiles switched: the flicker in
+  the first film (`docs/pitfalls.md`). The procedural detail and the lines' noise are functions of the world
+  position, the same at every level; the detail a coarser level leaves out is part of what its tiles morph.
 - **Crack-free seams.** Every tile hangs double-sided skirts from its four edges, as deep as the widest gap its edges
   can have against a tile up to two levels finer or coarser (sampled at the finer spacing), plus `terrain.skirtMargin`
   and the meshes' 16-bit height quantization. With them no background shows through anywhere; without them (the
@@ -88,7 +103,8 @@ and grass may grow).
 - **What the vertices carry for the material:** the planar position (from the tile's origin plus that origin modulo
   16384 m) split in high and low float16 halves over UV0 and UV1 (millimetres, continuous across tiles for every
   texture whose repeat divides 16384 m); the altitude in two bytes of the vertex colour (1/8 m, linear between
-  vertices since the bytes interpolate apart); the curvature (`terrain.curvatureScale`) in its blue.
+  vertices since the bytes interpolate apart); the curvature at `terrain.layerScale` (`terrain.curvatureScale`) in its
+  blue, the slope there in its alpha.
 - **Large worlds.** Tiles are nodes at their world positions in doubles; the engine draws every instance relative to
   each view's camera (two floats per axis), so the terrain is as precise 100 km out as at the origin.
 

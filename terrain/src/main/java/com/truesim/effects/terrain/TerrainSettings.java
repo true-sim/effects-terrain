@@ -41,7 +41,7 @@ public final class TerrainSettings {
     public static final Setting<Float> FOLLOW_STEP = Setting.decimal("terrain.followStep", 32, 0, 10_000,
         "metres the camera moves before the terrain's streaming selects tiles anew");
     /** How long a level transition takes: tiles morph between levels' surfaces over it, seconds (0: switch at once). */
-    public static final Setting<Float> MORPH_SECONDS = Setting.decimal("terrain.morphSeconds", 0.4f, 0, 10,
+    public static final Setting<Float> MORPH_SECONDS = Setting.decimal("terrain.morphSeconds", 0.6f, 0, 10,
         "seconds terrain tiles take to morph from one level's surface to another's");
     /**
      * The scale the material's slope and curvature are measured at, metres: the same for every level finer than it, so

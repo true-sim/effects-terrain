@@ -16,7 +16,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /**
  * Where the film's level switches show ({@code TRUESIM_SCREENSHOTS=true}): the films' flight at 640 x 360, each frame
  * drawn twice at the same camera, with the tiles before the terrain's update and after; their difference, by blocks of
- * 40 x 40 pixels, is what the switches alone change. Prints the frames whose switches change a block by more than the
+ * 20 x 20 pixels, is what the switches alone change. Prints the frames whose switches change a block by more than the
  * camera's own motion from frame to frame does, the tiles that came and went, and tiles shown, hidden and shown again.
  */
 @EnabledIfEnvironmentVariable(named = "TRUESIM_SCREENSHOTS", matches = "true")
@@ -24,31 +24,32 @@ class LodSwitchAnalysis {
 
     private static final int W = 640;
     private static final int H = 360;
-    private static final int B = 40;
+    private static final int B = 20;
 
+    /** The tone-mapped luminance of each pixel, 0 to 255. */
     static double[] blocks(float[] rgb) {
-        int bw = W / B;
-        int bh = H / B;
-        double[] out = new double[bw * bh];
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                int i = y * W + x;
-                double l = TerrainFilms.tone(0.2126 * rgb[3 * i] + 0.7152 * rgb[3 * i + 1] + 0.0722 * rgb[3 * i + 2]);
-                out[(y / B) * bw + x / B] += l;
-            }
-        }
-        for (int k = 0; k < out.length; k++) {
-            out[k] /= B * B;
+        double[] out = new double[W * H];
+        for (int i = 0; i < W * H; i++) {
+            out[i] = TerrainFilms.tone(0.2126 * rgb[3 * i] + 0.7152 * rgb[3 * i + 1] + 0.0722 * rgb[3 * i + 2]);
         }
         return out;
     }
 
+    /** The largest mean absolute difference of a block of B x B pixels. */
     static double maxDiff(double[] a, double[] b) {
-        double m = 0;
-        for (int k = 0; k < a.length; k++) {
-            m = Math.max(m, Math.abs(a[k] - b[k]));
+        double worst = 0;
+        for (int by = 0; by < H; by += B) {
+            for (int bx = 0; bx < W; bx += B) {
+                double sum = 0;
+                for (int y = by; y < by + B; y++) {
+                    for (int x = bx; x < bx + B; x++) {
+                        sum += Math.abs(a[y * W + x] - b[y * W + x]);
+                    }
+                }
+                worst = Math.max(worst, sum / (B * B));
+            }
         }
-        return m;
+        return worst;
     }
 
     @Test
