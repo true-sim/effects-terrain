@@ -18,9 +18,12 @@ dependencies {
     testImplementation("com.truesim.effects:weather-snow:0.3.0") // snow lying on the terrain
 }
 
-// The terrain material's parameters (TerrainParameters) as a Java record and its MaterialType (TerrainMaterial).
+// The terrain material's parameters (TerrainParameters) as a Java record and its MaterialType (TerrainType); a
+// shading listing so the tests' (TestTerrainShadingHooks) rebuilds the terrain's shading with the hooks of the libraries
+// they draw with (the atmosphere's, the snow's). An application lists every hook in its own, which wins.
 slang {
     javaPackage = "com.truesim.effects.terrain.material"
+    shadingHooks = "com.truesim.effects.terrain.material.TerrainShadingHooks"
 }
 
 // The benchmarks (TRUESIM_BENCHMARK=true) and films (TRUESIM_SCREENSHOTS=true) measure the code, not its coverage
@@ -32,5 +35,6 @@ tasks.test {
         extensions.configure<JacocoTaskExtension> { isEnabled = false }
     }
     providers.gradleProperty("screenshots").orNull?.let { systemProperty("truesim.screenshots", it) }
+    providers.gradleProperty("popDebug").orNull?.let { systemProperty("truesim.popDebug", it) }
     providers.gradleProperty("truesim.terrain.cache").orNull?.let { systemProperty("truesim.terrain.cache", it) }
 }

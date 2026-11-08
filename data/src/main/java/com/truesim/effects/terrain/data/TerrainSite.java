@@ -89,7 +89,14 @@ public final class TerrainSite {
      * each source's pyramid at the level for samples {@code footprint} metres apart and blended at their edges.
      */
     public double height(double x, double z, double footprint) {
-        double lat = frame.latitude(z);
+        return heightAtLatitude(x, frame.latitude(z), footprint);
+    }
+
+    /**
+     * {@link #height} at ({@code x}, the z of latitude {@code lat}): for a row of points, whose latitude is worked out
+     * once ({@link LocalFrame#latitude(double)}).
+     */
+    public double heightAtLatitude(double x, double lat, double footprint) {
         double lon = frame.longitude(x, lat);
         double east = Double.NaN;
         double north = Double.NaN;

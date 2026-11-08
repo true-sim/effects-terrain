@@ -47,14 +47,32 @@ public final class TerrainSurface {
      * the curvature's fall.
      */
     public double altitude(double x, double z, double footprint) {
-        double base = site.height(x, z, footprint);
+        LocalFrame frame = site.frame();
+        if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
+            return site.heightAtLatitude(x, frame.latitude(z), footprint);
+        }
+        double step = Math.max(SLOPE_STEP, footprint);
+        return altitude(x, z, footprint, frame.latitude(z), frame.latitude(z + step));
+    }
+
+    /**
+     * {@link #altitude(double, double, double)} with the latitudes of {@code z} and of {@code z} plus the slope's step
+     * ({@code max(16, footprint)} metres) given: for rows of points, whose latitudes are worked out once.
+     */
+    public double altitude(double x, double z, double footprint, double lat, double latNext) {
+        double base = site.heightAtLatitude(x, lat, footprint);
         if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
             return base;
         }
         double step = Math.max(SLOPE_STEP, footprint);
-        double gx = (site.height(x + step, z, footprint) - base) / step;
-        double gz = (site.height(x, z + step, footprint) - base) / step;
+        double gx = (site.heightAtLatitude(x + step, lat, footprint) - base) / step;
+        double gz = (site.heightAtLatitude(x, latNext, footprint) - base) / step;
         return base + detail(x, z, footprint, gx, gz);
+    }
+
+    /** The step the detail's slope is taken over for samples {@code footprint} apart, metres. */
+    public static double slopeStep(double footprint) {
+        return Math.max(SLOPE_STEP, footprint);
     }
 
     /** The surface's height at ({@code x}, {@code z}) sampled at {@code footprint}: the altitude less the curvature. */

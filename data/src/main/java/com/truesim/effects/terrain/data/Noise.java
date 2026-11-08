@@ -57,16 +57,24 @@ final class Noise {
         return value;
     }
 
+    /** 256 unit gradients round the circle, picked by a hash's top bits. */
+    private static final double[] GX = new double[256];
+    private static final double[] GY = new double[256];
+
+    static {
+        for (int i = 0; i < 256; i++) {
+            double angle = (i + 0.5) * (2 * Math.PI / 256);
+            GX[i] = Maths.cos(angle);
+            GY[i] = Maths.sin(angle);
+        }
+    }
+
     private static double gx(long h) {
-        return Maths.cos(angle(h));
+        return GX[(int) (h >>> 56)];
     }
 
     private static double gy(long h) {
-        return Maths.sin(angle(h));
-    }
-
-    private static double angle(long h) {
-        return (h >>> 11) * (2 * Math.PI / (1L << 53));
+        return GY[(int) (h >>> 56)];
     }
 
     /** A 64-bit hash of a lattice point and seed (SplitMix64's finalizer over a combination). */
