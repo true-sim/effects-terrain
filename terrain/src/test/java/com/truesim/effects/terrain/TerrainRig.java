@@ -66,6 +66,19 @@ final class TerrainRig implements AutoCloseable {
 
 
 
+    static {
+        // Which CPU a CI runner had: lavapipe's code generation follows it (the engine's docs/pitfalls.md)
+        try {
+            java.nio.file.Path info = java.nio.file.Path.of("/proc/cpuinfo");
+            if (java.nio.file.Files.isRegularFile(info)) {
+                java.nio.file.Files.readAllLines(info).stream().filter(l -> l.startsWith("model name")).findFirst()
+                    .ifPresent(l -> System.out.println("CPU: " + l));
+            }
+        } catch (java.io.IOException e) {
+            System.out.println("CPU: unknown (" + e + ")");
+        }
+    }
+
     /** The clear color: pure magenta, which no terrain layer is. */
     static final float[] CLEAR = {1, 0, 1};
 
