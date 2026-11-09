@@ -142,10 +142,16 @@ a texture's varying round it), projected three ways with `cliffSharpness`; then
   dipping `beddingDip` towards `beddingAzimuth`, waving by `beddingWaviness`) and two sets of vertical joints
   (`jointSpacing`, `jointStrength`), its gradient by differences in world space (no projection to streak), each
   faded out where a pixel cannot hold it;
-- **macro variation down the faces**: dark water streaks, long down the face and narrow across it (`streaks`); darker
-  bands under the beds' ledges, dipping as the bedding (`bands`, `bandSpacing`, readable from afar); lighter, warmer
-  fresh rockfall scars (`scars`); lichen patches (`lichen`, `lichenColor`), more where the wall is less steep; wet
-  darkening and gloss at the walls' foot, where the ground turns concave (`wetFoot`).
+- **macro variation down the faces**: dark water streaks, long down the face and narrow across it, matte
+  (`streaks`, `streakRough` 0.93) and stained brown-grey; darker bands under the beds' ledges, dipping as the bedding,
+  each band its own width and depth (some none) and fading in and out along the wall (`bands`, `bandSpacing`); lighter,
+  warmer fresh rockfall scars (`scars`); lichen patches (`lichen`, `lichenColor`), more where the wall is less steep;
+  wet darkening at the walls' foot, where the ground turns concave (`wetFoot`);
+- **the ledges** of a wall whose relief is in the mesh: weathered limestone and grey debris (`ledgeColor`) with a
+  little lichen (`ledgeLichen`), not the slopes' layers. The tiles flag a wall's vertices by their tangent ((0, -0.6,
+  -0.8): y + z below 0, where the modifiers' cover mix it carries elsewhere never goes, and still below 0 after the
+  deformation pass that morphs tiles turns it square to the normal), and the material gives everything flagged the
+  cliff layer whatever its slope.
 
 **The geometry: relief on the walls** (`CliffParameters`, `terrain.cliffs.*`), only where the data's slope passes
 `terrain.cliffs.slopeStart` (55 degrees, all of it from 60), every feature a horizontal shift of the wall, out of it
@@ -153,10 +159,11 @@ or into it:
 
 - **smoothing**: on the walls the data is averaged over `smoothing` (2 m: a box over its bilinear samples, a quadratic
   B-spline), so its samples leave no creases;
-- **bedding**: beds `bedThickness` (9 m) thick, varying by `bedVariation`, dipping `dip` towards `dipAzimuth`, waving
+- **bedding**: beds `bedThickness` (9 m) thick, varying by `bedVariation` (0.6, two octaves along the bed count), dipping `dip` towards `dipAzimuth`, waving
   by `waviness`; each bed's soft foot weathered back `ledge` metres under the hard bed above (an overhang, its
-  underside facing down, the bed below ending in a ledge), its depth and thickness each bed's own (some beds none),
-  deepening and fading along the wall, each hard bed leaning back a little as it rises;
+  underside facing down, the bed below ending in a ledge), its depth and thickness each bed's own (a third of the
+  beds none), each bed deepening and fading along the wall at places of its own, each hard bed leaning back a little
+  as it rises; the detail normal's laminae vary alike, plane by plane;
 - **joints**: two vertical sets at right angles (`jointAzimuth`), about `jointSpacing` apart, clefts `jointWidth` wide
   and `jointDepth` deep, some missing;
 - **buttresses**: ribs and bays `buttressDepth` out and in, about `buttressLength` apart along the wall.
@@ -208,7 +215,7 @@ low or `terrain.cliffs.step` coarse, or the relief in `HEIGHT`.
 
 **Shadows.** The relief is in the tiles' meshes, so the shadow maps draw it and ray tracing's bottom levels hold it:
 under a sun grazing a wall its overhangs and joints shadow the wall below them, by the cascades (which pancake the
-casters towards the sun) and by rays alike (`CliffGpuTest`: the shadows darken 1,474 and 1,321 pixels of a 192 x 128
+casters towards the sun) and by rays alike (`CliffGpuTest`: the shadows darken 1,364 and 1,108 pixels of a 192 x 128
 view of the relief, none of the flat wall).
 
 ## Modifiers: beds, roads, squares and the materials they lay

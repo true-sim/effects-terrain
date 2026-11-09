@@ -220,7 +220,10 @@ public final class TerrainSurface {
         double bed = altitude + Maths.tan(Maths.toRadians(c.dip())) * along
             + c.waviness() * 1.4 * Noise.noise(x / c.wavinessLength(), z / c.wavinessLength(), SEED + 101, null);
         double q = bed / c.bedThickness();
-        return q + c.bedVariation() * 1.4 * Noise.noise(q / 3, 0.5, SEED + 102, null);
+        // beds of uneven thickness: two octaves of noise along the bed count (the coordinate still rising with the
+        // altitude at the default variation, 0.6: the noise's slope stays under 1 / 0.6 of it)
+        return q + c.bedVariation() * (0.9 * Noise.noise(q / 2.3, 0.5, SEED + 102, null)
+            + 0.35 * Noise.noise(q / 0.9, 0.5, SEED + 107, null));
     }
 
     /**
@@ -323,10 +326,12 @@ public final class TerrainSurface {
             // how much it leans; and along the wall the notches deepen and fade
             long h = Noise.hash((long) bed, 7, SEED + 105);
             double depth = (h >>> 11) * 0x1.0p-53;
-            depth = depth < 0.2 ? 0 : 0.3 + 0.7 * depth;
+            depth = depth < 0.35 ? 0 : 0.2 + 0.8 * (depth - 0.35) / 0.65;
             double band = 0.18 + 0.2 * ((h >>> 3) & 0xff) / 255.0;
             double lean = 0.15 + 0.4 * ((h >>> 20) & 0xff) / 255.0;
-            double lateral = Math.clamp(0.55 + 1.2 * Noise.noise(x / 55, z / 55, SEED + 106, null), 0, 1);
+            // along the wall each bed fades in and out at places of its own
+            double lateral = Math.clamp(0.25 + 1.9 * Noise.noise(x / 45 + bed * 3.7, z / 45 - bed * 2.3, SEED + 106,
+                null), 0, 1);
             double notch = smooth(0, 0.1, phase) * (1 - smooth(band, band + 0.12, phase)) * depth * lateral;
             shift += fade * c.ledge() * (0.5 + 0.5 * lean - notch - lean * phase);
         }

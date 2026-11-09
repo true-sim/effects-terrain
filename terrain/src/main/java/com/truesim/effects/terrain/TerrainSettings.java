@@ -117,7 +117,7 @@ public final class TerrainSettings {
     public static final Setting<Float> CLIFF_BED = Setting.decimal("terrain.cliffs.bedThickness", 9, 0.5f, 200,
         "thickness of the beds of the terrain's cliffs, metres");
     /** How much the beds' thickness varies, 0 to 1. */
-    public static final Setting<Float> CLIFF_BED_VARIATION = Setting.decimal("terrain.cliffs.bedVariation", 0.45f, 0,
+    public static final Setting<Float> CLIFF_BED_VARIATION = Setting.decimal("terrain.cliffs.bedVariation", 0.6f, 0,
         1, "how much the thickness of the cliffs' beds varies, 0 to 1");
     /** The width of the ledges on the beds' tops, metres. */
     public static final Setting<Float> CLIFF_LEDGE = Setting.decimal("terrain.cliffs.ledge", 1.5f, 0, 50,

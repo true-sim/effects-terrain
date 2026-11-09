@@ -10,7 +10,8 @@
 //   COLOR.b    the curvature at terrain.layerScale: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave).
 //   COLOR.a    one less the total cover of the modifiers' surface materials (1: the layers alone).
 //   TANGENT    the mix of those materials, as a direction (TileMeshes.encodeMix; coverMix here): corners gravel,
-//              sand, cobbles and dirt.
+//              sand, cobbles and dirt (always y + z >= 0); (0, -0.6, -0.8) on a wall whose relief is in the mesh
+//              (CliffMesh), so the wall's ledges take the cliff layer whatever their slope.
 //
 // The CPU twin of the layer rules is effects-terrain's TerrainLayers: keep them in step.
 module terrain;
@@ -112,7 +113,10 @@ public struct TerrainParameters
     [Range(0, 1)] public float scars = 0.35;             // lighter fresh rockfall scars
     [Range(0, 1)] public float lichen = 0.3;             // a lichen tint in patches
     [Color] public float3 lichenColor = float3(0.30, 0.31, 0.22);
-    [Range(0, 1)] public float wetFoot = 0.5;            // darker and smoother where wet at the walls' foot
+    [Range(0, 1)] public float wetFoot = 0.5;            // darker where wet at the walls' foot
+    [Range(0, 1)] public float streakRough = 0.93;       // the streaks' roughness: matte, never a sky reflection
+    [Color] public float3 ledgeColor = float3(0.30, 0.295, 0.28); // the ledges' weathered limestone and grey debris
+    [Range(0, 1)] public float ledgeLichen = 0.45;       // how much lichen the ledges hold
 };
 
 /**
@@ -221,10 +225,18 @@ float cliffDetail(TerrainParameters p, float3 q, float pixel)
     float bed = q.y + tan(radians(p.beddingDip)) * along + wave;
     float t = max(p.beddingThickness, 0.05);
     float h = 0;
-    // fine laminae, every fourth plane a stronger one
+    // fine laminae and stronger planes, each its own thickness and strength (some missing), fading along the wall
     float fine = saturate(t / (6 * pixel) - 0.5);
     float coarse = saturate(4 * t / (6 * pixel) - 0.5);
-    h += p.beddingStrength * t * 0.12 * (fine * beddingStep(bed / t) + coarse * 1.6 * beddingStep(bed / (4 * t)));
+    float lf = bed / t + (valueNoise(float2(bed / (3 * t), 0.25), 1) - 0.5) * 1.2;
+    float lc = bed / (4 * t) + (valueNoise(float2(bed / (9 * t), 0.75), 1) - 0.5) * 1.1;
+    float sf = lattice(int2(int(floor(lf)), 3));
+    float sc = lattice(int2(int(floor(lc)), 5));
+    float along2 = q.x * 0.906 + q.z * 0.423;
+    float fadeF = saturate(valueNoise(float2(along2, floor(lf) * 13.0), 12) * 2.2 - 0.6);
+    float fadeC = saturate(valueNoise(float2(along2, floor(lc) * 17.0), 32) * 2.4 - 0.7);
+    h += p.beddingStrength * t * 0.12 * (fine * beddingStep(lf) * smoothstep(0.25, 0.6, sf) * fadeF
+        + coarse * 1.6 * beddingStep(lc) * smoothstep(0.2, 0.5, sc) * fadeC);
     float sj = max(p.jointSpacing, 0.1);
     float jfade = saturate(sj / (12 * pixel) - 0.5);
     if (jfade > 0)
@@ -244,7 +256,7 @@ float cliffDetail(TerrainParameters p, float3 q, float pixel)
  * world-space detail of bedding and joints, then the faces' macro variation: streaks, scars, lichen, the wet foot.
  */
 float3 cliffSurface(TerrainParameters p, float3 n, float2 xz, float altitude, float2 dxz, float2 dyz, float dAltX,
-    float dAltY, float curvature, out float4 ar)
+    float dAltY, float curvature, float wall, out float4 ar)
 {
     float3 blend = pow(abs(n), max(p.cliffSharpness, 1.0));
     blend /= blend.x + blend.y + blend.z;
@@ -313,10 +325,15 @@ float3 cliffSurface(TerrainParameters p, float3 n, float2 xz, float altitude, fl
     float bed = altitude + tan(radians(p.beddingDip)) * (xz.x * sin(az) - xz.y * cos(az))
         + (valueNoise(xz, 32) - 0.5) * 4;
     float spacing = max(p.bandSpacing, 0.5);
-    float u = bed / spacing + (valueNoise(float2(bed / spacing, 0.5), 2) - 0.5) * 0.8;
+    float u = bed / spacing + (valueNoise(float2(bed / spacing, 0.5), 1) - 0.5) * 1.3;
     float f = u - floor(u);
-    float band = smoothstep(0.55, 0.85, f) * (1 - smoothstep(0.9, 1.0, f));
-    band *= saturate(spacing / (8 * pixel) - 0.25) * (0.6 + 0.4 * valueNoise(float2(across, bed), 16));
+    // each band its own width and depth (some none), each fading in and out along the wall where it likes
+    float which = floor(u);
+    float depth = lattice(int2(int(which), 9));
+    float width = 0.12 + 0.25 * lattice(int2(int(which), 11));
+    float band = smoothstep(0.92 - width, 0.92 - width * 0.4, f) * (1 - smoothstep(0.93, 1.0, f));
+    band *= smoothstep(0.25, 0.55, depth) * saturate(valueNoise(float2(across, which * 23.0), 40) * 2.4 - 0.7);
+    band *= saturate(spacing / (8 * pixel) - 0.25);
     // fresh scars: lighter, warmer patches where rock broke away
     float scar = smoothstep(0.64, 0.74, valueNoise(float2(across, altitude * 0.7), 24) * 0.7
         + valueNoise(float2(across, altitude), 6) * 0.3);
@@ -327,13 +344,21 @@ float3 cliffSurface(TerrainParameters p, float3 n, float2 xz, float altitude, fl
     float wet = smoothstep(0.15, 0.7, curvature) * p.wetFoot;
 
     float3 albedo = c.rgb;
-    albedo *= 1 - p.streaks * 0.6 * streak * float3(0.95, 1.0, 1.05); // wet streaks a little warm
+    // the ledges on a wall: weathered limestone and grey debris, a little lichen (not the slopes' layers)
+    float ledge = wall * smoothstep(0.45, 0.8, n.y);
+    float debris = 0.75 + 0.5 * (valueNoise(xz, 0.35) * 0.6 + valueNoise(xz, 1.5) * 0.4);
+    albedo = lerp(albedo, p.ledgeColor * debris, ledge * 0.85);
+    patch = lerp(patch, max(patch, smoothstep(0.35, 0.7, valueNoise(xz, 1.2))), ledge * p.ledgeLichen);
+    // water streaks: darker and dull (organic stains: brown-grey, rough)
+    albedo *= 1 - p.streaks * 0.65 * streak * float3(0.92, 1.0, 1.18); // stained brown-grey: blue darkened most
+    rough = lerp(rough, max(p.streakRough, rough), saturate(streak * 1.5));
     albedo *= 1 - p.bands * band;
     albedo = lerp(albedo, albedo * float3(1.32, 1.27, 1.18) + float3(0.04, 0.035, 0.02),
         p.scars * scar * (1 - streak));
-    albedo = lerp(albedo, p.lichenColor * (0.6 + 0.8 * valueNoise(xz, 0.5)), p.lichen * patch * (0.5 + 0.5 * flat));
+    albedo = lerp(albedo, p.lichenColor * (0.6 + 0.8 * valueNoise(xz, 0.5)),
+        saturate(p.lichen * patch * (0.5 + 0.5 * flat) + ledge * p.ledgeLichen * patch * 0.5));
     albedo *= 1 - 0.45 * wet;
-    rough = lerp(rough, 0.5, wet * 0.7);
+    rough = max(lerp(rough, 0.7, wet * 0.7), 0.6);
     ar = float4(albedo, rough);
     return shaded;
 }
@@ -389,8 +414,13 @@ public struct TerrainType : IMaterial
             normal += float3(t.x + n.x, abs(t.z) * n.y, t.y + n.z) * weight;
         }
         // Cliffs: the walls' share of rock
-        float cliff = w.x * cliffShare(p, slope + (noise - 0.5) * 2 * p.jitter * 4);
-        w.x -= cliff;
+        // the walls' share: rock's past the cliffs' slope, and everything on a wall (the tiles flag a wall's vertices by
+        // their tangent, y + z below 0 where the cover's mix never goes: its ledges stay limestone and debris)
+        float wall = saturate(-(in.tangent.y + in.tangent.z) * 1.5 - 0.2);
+        float rockCliff = w.x * cliffShare(p, slope + (noise - 0.5) * 2 * p.jitter * 4);
+        float cliff = max(rockCliff, wall * (1 - w.w));
+        w.x -= rockCliff;
+        w *= (1 - cliff) / max(1 - rockCliff, 1e-4);
         // Rock: three projections, by how much the surface faces each axis
         if (w.x > 0.001)
         {
@@ -437,7 +467,7 @@ public struct TerrainType : IMaterial
         if (cliff > 0.001)
         {
             float4 car;
-            float3 cn = cliffSurface(p, n, xz, altitude, dxz, dyz, dAltX, dAltY, curvature, car);
+            float3 cn = cliffSurface(p, n, xz, altitude, dxz, dyz, dAltX, dAltY, curvature, wall, car);
             albedo += car.rgb * cliff * (1 + (macro - 0.5) * p.macro);
             roughness += car.w * cliff;
             normal += cn * cliff;

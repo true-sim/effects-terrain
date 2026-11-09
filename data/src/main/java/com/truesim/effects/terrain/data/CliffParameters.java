@@ -69,7 +69,7 @@ public record CliffParameters(double slopeStart, double slopeEnd, double smoothi
         60, Relief.HEIGHT);
 
     /** Limestone walls as Lauterbrunnen's: beds of about 9 m, ledges 1.5 m wide, joints every 24 m, ribs of 4 m. */
-    public static final CliffParameters LIMESTONE = new CliffParameters(55, 60, 2, 9, 0.45, 1.5, 4, 150, 2.5, 140, 24,
+    public static final CliffParameters LIMESTONE = new CliffParameters(55, 60, 2, 9, 0.6, 1.5, 4, 150, 2.5, 140, 24,
         2.5, 2, 25, 4, 90, Relief.MESH);
 
     public CliffParameters {
