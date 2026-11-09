@@ -385,6 +385,11 @@ public final class CliffMesh {
             if (w <= 0) {
                 continue;
             }
+            // the wall flagged for the material by the tangent's sign (its xyz carries the cover's mix; the sign
+            // survives the deformation pass that morphs tiles, which turns the tangent's direction)
+            if (w >= 0.5) {
+                verts.tangents[4 * v + 3] = -1;
+            }
             double ox = p[0];
             double oy = p[1];
             double oz = p[2];

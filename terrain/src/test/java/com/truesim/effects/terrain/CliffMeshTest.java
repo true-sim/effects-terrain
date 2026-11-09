@@ -78,6 +78,11 @@ class CliffMeshTest {
             }
         }
         assertThat(moved).as("vertices the relief moved").isGreaterThan(g.top() / 4);
+        // the wall's vertices flagged for the material by their tangent's sign, the rest not
+        for (int i = 0; i < g.top(); i++) {
+            assertThat(v.tangents[4 * i + 3]).as("vertex %d's tangent sign at weight %s", i, v.weight[i])
+                .isEqualTo(v.weight[i] >= 0.5 ? -1f : 1f);
+        }
     }
 
     @Test

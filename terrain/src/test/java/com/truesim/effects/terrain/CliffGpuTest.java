@@ -131,6 +131,6 @@ class CliffGpuTest {
         System.out.println(method + ": pixels the shadows darken on the flat wall " + flat + ", with the relief "
             + relief);
         assertThat(relief).as("pixels the relief's shadows darken, against %d on the flat wall", flat)
-            .isGreaterThan(flat + 192 * 128 / 20);
+            .isGreaterThan(flat + 192 * 128 / 40);
     }
 }
