@@ -15,7 +15,7 @@ goes through the scene.
 
 ```kotlin
 dependencies {
-    implementation("com.truesim.effects:effects-terrain:0.1.0") // with engine-scene 0.197, scene 0.70
+    implementation("com.truesim.effects:effects-terrain:0.4.0") // with engine-scene 0.198, scene 0.70
 }
 ```
 
