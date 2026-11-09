@@ -1,6 +1,7 @@
 package com.truesim.effects.terrain;
 
 import com.truesim.annotations.AllowAllocation;
+import com.truesim.effects.terrain.data.CliffParameters;
 import com.truesim.effects.terrain.data.LocalFrame;
 import com.truesim.effects.terrain.data.TerrainSurface;
 import com.truesim.scene.assets.Generator;
@@ -46,6 +47,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
     private final java.util.concurrent.ConcurrentHashMap<Long, Info> infos = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile boolean skirts = true;
     private volatile double layerScale = 16;
+    private volatile CliffMesh.Settings cliff = CliffMesh.Settings.DEFAULTS;
 
     /**
      * Tiles of {@code grid} on {@code surface}, skirts {@code skirtMargin} metres past the gaps they close, curvature
@@ -79,6 +81,12 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         return this;
     }
 
+    /** How the cliffs' meshes refine where their relief is in the mesh ({@code CliffParameters.Relief.MESH}). */
+    public TileMeshes cliffs(CliffMesh.Settings settings) {
+        this.cliff = settings;
+        return this;
+    }
+
     public TerrainSurface surface() {
         return surface;
     }
@@ -94,9 +102,10 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
 
     /**
      * What a tile is, once built: {@code error}, the largest distance along the normal between its triangles and the
-     * finer level's surface ({@link TerrainError#tile}); its heights from {@code low} to {@code high}.
+     * finer level's surface ({@link TerrainError#tile}); its heights from {@code low} to {@code high}; its
+     * {@code vertices} on top (without skirts: more than the grid's where its cliffs were refined).
      */
-    public record Info(double error, double low, double high) {
+    public record Info(double error, double low, double high, int vertices) {
     }
 
     /** What tile {@code key} is, once its mesh was built (null before). */
@@ -111,6 +120,35 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
 
     /** The mesh of tile {@code key}, with a morph target onto level {@code morphTo}'s surface if it is coarser. */
     public MeshData build(long key, int morphTo) {
+        Geometry g = geometry(key, morphTo);
+        CliffMesh.Vertices verts = g.vertices();
+        int vertices = g.count();
+        MeshBuilder builder = new MeshBuilder(FORMAT, vertices).pool(pool)
+            .positions(java.util.Arrays.copyOf(verts.positions, 3 * vertices))
+            .attribute(VertexAttribute.NORMAL, java.util.Arrays.copyOf(verts.normals, 3 * vertices))
+            .attribute(VertexAttribute.TANGENT, java.util.Arrays.copyOf(verts.tangents, 4 * vertices))
+            .attribute(VertexAttribute.UV0, java.util.Arrays.copyOf(verts.uv0, 2 * vertices))
+            .attribute(VertexAttribute.UV1, java.util.Arrays.copyOf(verts.uv1, 2 * vertices))
+            .attribute(VertexAttribute.COLOR, java.util.Arrays.copyOf(verts.colors, 4 * vertices))
+            .submesh(g.indices());
+        if (g.morph() != null) {
+            builder.morphTarget("coarser", g.morph()[0], g.morph()[1], null);
+        }
+        return builder.buildFlat();
+    }
+
+    /**
+     * A tile's geometry before it is a mesh: its {@code vertices} ({@code count} of them, the first {@code top} the
+     * surface's, the rest its skirts'), its triangles' {@code indices} (the surface's first, {@code surface} of them),
+     * its borders' vertices in order ({@code sides}: z = 0, z = size, x = 0, x = size), how deep its skirts hang, and
+     * its morph target's position and normal deltas (null without).
+     */
+    record Geometry(CliffMesh.Vertices vertices, int count, int top, int[] indices, int surface, int[][] sides,
+        double skirtDepth, float[][] morph) {
+    }
+
+    /** {@link #build(long, int)}'s geometry. */
+    Geometry geometry(long key, int morphTo) {
         int level = TerrainGrid.level(key);
         int n = grid.quads();
         double size = grid.size(level);
@@ -135,13 +173,11 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         }
         double depth = skirts ? skirtDepth(level, x0, z0, height, a) : 0;
         int top = (n + 1) * (n + 1);
-        int vertices = top + (skirts ? 4 * (n + 1) : 0);
-        float[] positions = new float[3 * vertices];
-        float[] normals = new float[3 * vertices];
-        float[] uv0 = new float[2 * vertices];
-        float[] uv1 = new float[2 * vertices];
-        float[] colors = new float[4 * vertices];
-        float[] tangents = new float[4 * vertices];
+        CliffMesh.Vertices verts = new CliffMesh.Vertices(top + (skirts ? 4 * (n + 1) : 0));
+        verts.count = top;
+        float[] positions = verts.positions;
+        float[] normals = verts.normals;
+        float[] colors = verts.colors;
         double[] layer = layerField(level, x0, z0, height, a);
         double px0 = Math.floorMod((long) x0, (long) TerrainGrid.PLANAR_PERIOD) + (x0 - Math.floor(x0));
         double pz0 = Math.floorMod((long) z0, (long) TerrainGrid.PLANAR_PERIOD) + (z0 - Math.floor(z0));
@@ -150,6 +186,8 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 int v = j * (n + 1) + i;
                 int c = (j + 1) * a + i + 1;
                 double h = height[c];
+                verts.px[v] = i * s;
+                verts.pz[v] = j * s;
                 positions[3 * v] = (float) (i * s);
                 positions[3 * v + 1] = (float) h;
                 positions[3 * v + 2] = (float) (j * s);
@@ -159,22 +197,17 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 normals[3 * v] = (float) (-dx / length);
                 normals[3 * v + 1] = (float) (1 / length);
                 normals[3 * v + 2] = (float) (-dz / length);
-                split(px0 + i * s, uv0, uv1, 2 * v);
-                split(pz0 + j * s, uv0, uv1, 2 * v + 1);
+                split(px0 + i * s, verts.uv0, verts.uv1, 2 * v);
+                split(pz0 + j * s, verts.uv0, verts.uv1, 2 * v + 1);
                 double laplacian = layer[4 * v + 3];
-                int alt = Math.clamp(Math.round((altitude[c] + 1024) * 8), 0, 65535);
-                colors[4 * v] = (alt >>> 8) / 255f;
-                colors[4 * v + 1] = (alt & 0xff) / 255f;
+                encodeAltitude(altitude[c], colors, 4 * v);
                 colors[4 * v + 2] = Math.round(255 * (0.5 + 0.5 * Math.clamp(laplacian / curvatureScale, -1, 1)))
                     / 255f;
                 colors[4 * v + 3] = 1;
             }
         }
-        cover(x0, z0, s, colors, tangents);
-        // Skirts: a copy of each edge's vertices, `depth` below
-        int[] edge = new int[n + 1];
-        int skirt = top;
-        int[] indices = new int[6 * n * n + (skirts ? 4 * 12 * n : 0)];
+        cover(x0, z0, s, colors, verts.tangents);
+        int[] triangles = new int[6 * n * n];
         int t = 0;
         for (int j = 0; j < n; j++) {
             for (int i = 0; i < n; i++) {
@@ -182,34 +215,78 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 int v10 = v00 + 1;
                 int v01 = v00 + n + 1;
                 int v11 = v01 + 1;
-                indices[t++] = v00;
-                indices[t++] = v01;
-                indices[t++] = v10;
-                indices[t++] = v10;
-                indices[t++] = v01;
-                indices[t++] = v11;
+                triangles[t++] = v00;
+                triangles[t++] = v01;
+                triangles[t++] = v10;
+                triangles[t++] = v10;
+                triangles[t++] = v01;
+                triangles[t++] = v11;
             }
         }
-        for (int side = 0; side < (skirts ? 4 : 0); side++) {
+        int[][] sides = new int[4][n + 1];
+        for (int side = 0; side < 4; side++) {
             for (int k = 0; k <= n; k++) {
-                edge[k] = switch (side) {
+                sides[side][k] = switch (side) {
                     case 0 -> k;                       // z = 0
                     case 1 -> n * (n + 1) + k;         // z = size
                     case 2 -> k * (n + 1);             // x = 0
                     default -> k * (n + 1) + n;        // x = size
                 };
+            }
+        }
+        // Cliffs with their relief in the mesh: steep triangles refined, wall vertices moved out and in
+        CliffParameters cliffs = surface.parameters().cliffs();
+        boolean meshRelief = cliffs.relief() == CliffParameters.Relief.MESH && cliffs.any()
+            && CliffMesh.steep(height, a, s, cliffs.slopeStart() - 10);
+        boolean refined = meshRelief && level < cliff.levels() && cliff.rounds() > 0;
+        if (meshRelief) {
+            CliffMesh mesh = new CliffMesh(surface, cliff, level, x0, z0, s, px0, pz0, verts);
+            if (refined) {
+                triangles = mesh.refine(triangles);
+                for (int side = 0; side < 4; side++) {
+                    sides[side] = mesh.chain(sides[side]);
+                }
+            }
+            mesh.displace(refined);
+            positions = verts.positions;
+            normals = verts.normals;
+            colors = verts.colors;
+        }
+        top = verts.count;
+        // Skirts: a copy of each edge's vertices, `depth` below
+        int skirtCount = 0;
+        for (int side = 0; skirts && side < 4; side++) {
+            skirtCount += sides[side].length;
+        }
+        verts.ensure(top + skirtCount);
+        positions = verts.positions;
+        normals = verts.normals;
+        colors = verts.colors;
+        int vertices = top + skirtCount;
+        int skirtEdges = skirtCount - (skirts ? 4 : 0);
+        int[] indices = new int[triangles.length + 12 * skirtEdges];
+        System.arraycopy(triangles, 0, indices, 0, triangles.length);
+        t = triangles.length;
+        int[] skirtSource = new int[skirtCount];
+        int skirt = top;
+        for (int side = 0; skirts && side < 4; side++) {
+            int[] edge = sides[side];
+            for (int k = 0; k < edge.length; k++) {
                 int v = skirt + k;
                 int from = edge[k];
+                skirtSource[v - top] = from;
                 positions[3 * v] = positions[3 * from];
                 positions[3 * v + 1] = (float) (positions[3 * from + 1] - depth);
                 positions[3 * v + 2] = positions[3 * from + 2];
+                verts.px[v] = verts.px[from];
+                verts.pz[v] = verts.pz[from];
                 System.arraycopy(normals, 3 * from, normals, 3 * v, 3);
-                System.arraycopy(uv0, 2 * from, uv0, 2 * v, 2);
-                System.arraycopy(uv1, 2 * from, uv1, 2 * v, 2);
+                System.arraycopy(verts.uv0, 2 * from, verts.uv0, 2 * v, 2);
+                System.arraycopy(verts.uv1, 2 * from, verts.uv1, 2 * v, 2);
                 System.arraycopy(colors, 4 * from, colors, 4 * v, 4);
-                System.arraycopy(tangents, 4 * from, tangents, 4 * v, 4);
+                System.arraycopy(verts.tangents, 4 * from, verts.tangents, 4 * v, 4);
             }
-            for (int k = 0; k < n; k++) {
+            for (int k = 0; k + 1 < edge.length; k++) {
                 int a0 = edge[k];
                 int a1 = edge[k + 1];
                 int b0 = skirt + k;
@@ -228,7 +305,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 indices[t++] = b1;
                 indices[t++] = b0;
             }
-            skirt += n + 1;
+            skirt += edge.length;
         }
         double low = Double.MAX_VALUE;
         double high = -Double.MAX_VALUE;
@@ -236,16 +313,17 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
             low = Math.min(low, positions[3 * v + 1]);
             high = Math.max(high, positions[3 * v + 1]);
         }
-        infos.put(key, new Info(TerrainError.tile(surface, grid, key), low, high));
-        MeshBuilder builder = new MeshBuilder(FORMAT, vertices).pool(pool).positions(positions)
-            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.TANGENT, tangents)
-            .attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
-            .attribute(VertexAttribute.COLOR, colors).submesh(indices);
-        if (morphTo > level) {
-            float[][] deltas = morphDeltas(level, morphTo, x0, z0, positions, normals, top, vertices);
-            builder.morphTarget("coarser", deltas[0], deltas[1], null);
-        }
-        return builder.buildFlat();
+        infos.put(key, new Info(TerrainError.tile(surface, grid, key, cliff), low, high, top));
+        float[][] deltas = morphTo > level
+            ? morphDeltas(level, morphTo, x0, z0, verts, top, skirtSource, meshRelief) : null;
+        return new Geometry(verts, vertices, top, indices, triangles.length, sides, depth, deltas);
+    }
+
+    /** {@code altitude} (metres above sea level) into the color's red and green at {@code at}, eighths of a metre. */
+    static void encodeAltitude(double altitude, float[] colors, int at) {
+        int alt = Math.clamp(Math.round((altitude + 1024) * 8), 0, 65535);
+        colors[at] = (alt >>> 8) / 255f;
+        colors[at + 1] = (alt & 0xff) / 255f;
     }
 
     /**
@@ -483,19 +561,21 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
     }
 
     /**
-     * The morph target onto level {@code coarse}'s surface: for each vertex, how far it moves (in height) and how its
-     * normal turns to lie on the coarser tile's triangles with their normals (heights and normals of the coarser
-     * grid, from its own apron, as that tile has them; between its vertices on its two triangles a quad). Skirt
-     * vertices move with the edge vertex they hang from.
+     * The morph target onto level {@code coarse}'s surface: for each vertex, how far it moves and how its normal turns
+     * to lie on the coarser tile's triangles with their normals (heights and normals of the coarser grid, from its own
+     * apron, as that tile has them; between its vertices on its two triangles a quad). Vertices on walls with their
+     * relief in the mesh ({@code meshRelief}) move onto the coarser level's wall instead (its heights and relief at
+     * that footprint), keeping their normals. Skirt vertices move with the edge vertex they hang from.
      */
-    float[][] morphDeltas(int level, int coarse, double x0, double z0, float[] positions, float[] normals, int top,
-        int vertices) {
+    float[][] morphDeltas(int level, int coarse, double x0, double z0, CliffMesh.Vertices verts, int top,
+        int[] skirtSource, boolean meshRelief) {
         int n = grid.quads();
-        double s = grid.spacing(level);
         double sc = grid.spacing(coarse);
         int r = 1 << (coarse - level);
         int m = Math.max(1, n / r); // coarse quads across this tile
         int a = m + 3;
+        float[] positions = verts.positions;
+        float[] normals = verts.normals;
         double[] h = new double[a * a];
         for (int j = 0; j < a; j++) {
             for (int i = 0; i < a; i++) {
@@ -514,63 +594,64 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 cn[3 * c + 2] = -dz / length;
             }
         }
+        int vertices = top + skirtSource.length;
         float[] dp = new float[3 * vertices];
         float[] dn = new float[3 * vertices];
-        for (int j = 0; j <= n; j++) {
-            for (int i = 0; i <= n; i++) {
-                double fu = (double) i * s / sc;
-                double fv = (double) j * s / sc;
-                int ci = Math.min((int) Math.floor(fu), m - 1);
-                int cj = Math.min((int) Math.floor(fv), m - 1);
-                double u = fu - ci;
-                double w = fv - cj;
-                int c00 = (cj + 1) * a + ci + 1;
-                int c10 = c00 + 1;
-                int c01 = c00 + a;
-                int c11 = c01 + 1;
-                double b00;
-                double b10;
-                double b01;
-                double b11;
-                if (u + w <= 1) {
-                    b00 = 1 - u - w;
-                    b10 = u;
-                    b01 = w;
-                    b11 = 0;
-                } else {
-                    b00 = 0;
-                    b10 = 1 - w;
-                    b01 = 1 - u;
-                    b11 = u + w - 1;
-                }
-                double hc = b00 * h[c00] + b10 * h[c10] + b01 * h[c01] + b11 * h[c11];
-                double nx = b00 * cn[3 * c00] + b10 * cn[3 * c10] + b01 * cn[3 * c01] + b11 * cn[3 * c11];
-                double ny = b00 * cn[3 * c00 + 1] + b10 * cn[3 * c10 + 1] + b01 * cn[3 * c01 + 1]
-                    + b11 * cn[3 * c11 + 1];
-                double nz = b00 * cn[3 * c00 + 2] + b10 * cn[3 * c10 + 2] + b01 * cn[3 * c01 + 2]
-                    + b11 * cn[3 * c11 + 2];
-                double nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                int v = j * (n + 1) + i;
-                dp[3 * v + 1] = (float) (hc - positions[3 * v + 1]);
-                dn[3 * v] = (float) (nx / nl - normals[3 * v]);
-                dn[3 * v + 1] = (float) (ny / nl - normals[3 * v + 1]);
-                dn[3 * v + 2] = (float) (nz / nl - normals[3 * v + 2]);
+        double[] point = new double[7];
+        boolean coarseRefined = coarse < cliff.levels() && cliff.rounds() > 0;
+        for (int v = 0; v < top; v++) {
+            double px = verts.px[v];
+            double pz = verts.pz[v];
+            if (meshRelief && verts.weight[v] > 0) {
+                surface.cliffPoint(x0 + px, z0 + pz, sc, coarseRefined ? cliff.step(coarse) : -1, point);
+                dp[3 * v] = (float) (px + point[0] - positions[3 * v]);
+                dp[3 * v + 1] = (float) (point[1] - positions[3 * v + 1]);
+                dp[3 * v + 2] = (float) (pz + point[2] - positions[3 * v + 2]);
+                continue;
             }
+            double fu = px / sc;
+            double fv = pz / sc;
+            int ci = Math.clamp((int) Math.floor(fu), 0, m - 1);
+            int cj = Math.clamp((int) Math.floor(fv), 0, m - 1);
+            double u = fu - ci;
+            double w = fv - cj;
+            int c00 = (cj + 1) * a + ci + 1;
+            int c10 = c00 + 1;
+            int c01 = c00 + a;
+            int c11 = c01 + 1;
+            double b00;
+            double b10;
+            double b01;
+            double b11;
+            if (u + w <= 1) {
+                b00 = 1 - u - w;
+                b10 = u;
+                b01 = w;
+                b11 = 0;
+            } else {
+                b00 = 0;
+                b10 = 1 - w;
+                b01 = 1 - u;
+                b11 = u + w - 1;
+            }
+            double hc = b00 * h[c00] + b10 * h[c10] + b01 * h[c01] + b11 * h[c11];
+            double nx = b00 * cn[3 * c00] + b10 * cn[3 * c10] + b01 * cn[3 * c01] + b11 * cn[3 * c11];
+            double ny = b00 * cn[3 * c00 + 1] + b10 * cn[3 * c10 + 1] + b01 * cn[3 * c01 + 1]
+                + b11 * cn[3 * c11 + 1];
+            double nz = b00 * cn[3 * c00 + 2] + b10 * cn[3 * c10 + 2] + b01 * cn[3 * c01 + 2]
+                + b11 * cn[3 * c11 + 2];
+            double nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+            dp[3 * v] = (float) (px - positions[3 * v]);
+            dp[3 * v + 1] = (float) (hc - positions[3 * v + 1]);
+            dp[3 * v + 2] = (float) (pz - positions[3 * v + 2]);
+            dn[3 * v] = (float) (nx / nl - normals[3 * v]);
+            dn[3 * v + 1] = (float) (ny / nl - normals[3 * v + 1]);
+            dn[3 * v + 2] = (float) (nz / nl - normals[3 * v + 2]);
         }
-        // the skirts' vertices, after the top ones in the order build() lays them: each side's edge in turn
-        int skirt = top;
-        for (int side = 0; skirt < vertices && side < 4; side++) {
-            for (int k = 0; k <= n; k++) {
-                int from = switch (side) {
-                    case 0 -> k;
-                    case 1 -> n * (n + 1) + k;
-                    case 2 -> k * (n + 1);
-                    default -> k * (n + 1) + n;
-                };
-                System.arraycopy(dp, 3 * from, dp, 3 * (skirt + k), 3);
-                System.arraycopy(dn, 3 * from, dn, 3 * (skirt + k), 3);
-            }
-            skirt += n + 1;
+        // the skirts' vertices move with the vertex each hangs from
+        for (int k = 0; k < skirtSource.length; k++) {
+            System.arraycopy(dp, 3 * skirtSource[k], dp, 3 * (top + k), 3);
+            System.arraycopy(dn, 3 * skirtSource[k], dn, 3 * (top + k), 3);
         }
         return new float[][] {dp, dn};
     }

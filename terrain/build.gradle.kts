@@ -10,10 +10,10 @@ description = "Terrain for true-sim: heightfield tiles from real elevation data 
 
 dependencies {
     api(project(":effects-terrain-data"))
-    api("com.truesim.engine:engine-scene:0.198.0") // the renderer, the scene bridge, material types
+    api("com.truesim.engine:engine-scene:0.200.0") // the renderer, the scene bridge, material types
     api("com.truesim.scene:scene-world:0.70.0") // multi-level streaming
     api("com.truesim.scene:scene-meshbuild:0.70.0") // tiles into meshlets
-    testImplementation(testFixtures("com.truesim.engine:engine-render:0.198.0")) // the headless renderer
+    testImplementation(testFixtures("com.truesim.engine:engine-render:0.200.0")) // the headless renderer
     testImplementation("com.truesim.effects:atmosphere-render:0.4.0") // the sky of the films
     testImplementation("com.truesim.effects:weather-snow:0.3.0") // snow lying on the terrain
 }
@@ -37,4 +37,7 @@ tasks.test {
     providers.gradleProperty("screenshots").orNull?.let { systemProperty("truesim.screenshots", it) }
     providers.gradleProperty("popDebug").orNull?.let { systemProperty("truesim.popDebug", it) }
     providers.gradleProperty("truesim.terrain.cache").orNull?.let { systemProperty("truesim.terrain.cache", it) }
+    // the cliffs' film and stills: -Ptruesim.cliffs.tile=16, .shot=floor, .when=after, -Ptruesim.polyhaven=<dir>
+    providers.gradlePropertiesPrefixedBy("truesim.cliffs.").get().forEach { (k, v) -> systemProperty(k, v) }
+    providers.gradleProperty("truesim.polyhaven").orNull?.let { systemProperty("truesim.polyhaven", it) }
 }

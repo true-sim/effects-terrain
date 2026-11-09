@@ -112,7 +112,11 @@ class TerrainFilms {
 
     /** The site, through the asset manager: the terrain cache mounted, the .terrain importer, loaded in the background. */
     static TerrainSite load(TerrainRig rig) throws InterruptedException {
-        PathAssets paths = new PathAssets(rig.assets);
+        return load(rig, new PathAssets(rig.assets));
+    }
+
+    /** {@link #load(TerrainRig)} through {@code paths} (the rig's one set of paths: other mounts beside it). */
+    static TerrainSite load(TerrainRig rig, PathAssets paths) throws InterruptedException {
         TerrainAssets.register(paths);
         TerrainAssets.mount(paths, TestSites.cache());
         AssetRef<TerrainSite> ref = TerrainAssets.site(paths, "lauterbrunnen");

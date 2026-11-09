@@ -46,6 +46,33 @@ final class TestSites {
 
     /** The terrain cache: {@code -Dtruesim.terrain.cache}, else the repository's {@code terrain-cache}. */
     static Path cache() {
+        return cacheGiven();
+    }
+
+    /**
+     * A wall of 300 m facing east, as Lauterbrunnen's: from its rim at x = -50 m (1100 m above the sea) to its foot at
+     * x = 0 (800 m), between a valley floor and a plateau, the data 2 m apart (as swissALTI3D), 600 m a side.
+     */
+    static TerrainSite wall() {
+        int size = 300;
+        double metres = 2;
+        double dy = metres / 111_200.0;
+        double dx = metres / (111_200.0 * Math.cos(Math.toRadians(FRAME.latitude())));
+        float[] heights = new float[size * size];
+        for (int j = 0; j < size; j++) {
+            for (int i = 0; i < size; i++) {
+                double x = (i - size / 2) * metres;
+                double t = Math.clamp(-x / 50, 0, 1);
+                heights[j * size + i] = (float) (800 + 300 * t * t * (3 - 2 * t));
+            }
+        }
+        DemRaster raster = new DemRaster(DemRaster.GEOGRAPHIC, FRAME.longitude() - dx * (size / 2),
+            FRAME.latitude() + dy * (size / 2), dx, dy, size, size, heights);
+        return new TerrainSite("wall", "a synthetic wall", FRAME, List.of(new TerrainSite.Source("wall", raster, 0,
+            "synthetic")));
+    }
+
+    private static Path cacheGiven() {
         String given = System.getProperty("truesim.terrain.cache");
         return given != null ? Path.of(given) : Path.of("..", "terrain-cache");
     }
