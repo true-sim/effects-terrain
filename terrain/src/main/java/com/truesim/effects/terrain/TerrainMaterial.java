@@ -52,9 +52,41 @@ public final class TerrainMaterial {
         return (float) (TerrainGrid.PLANAR_PERIOD / repeats);
     }
 
+    /**
+     * The texture sets of the modifiers' surface materials ({@link com.truesim.effects.terrain.data.TerrainModifier}):
+     * gravel, cobbles, dirt and sand; {@link Layer#PLAIN} for a color alone.
+     */
+    public record Cover(Layer gravel, Layer cobbles, Layer dirt, Layer sand) {
+
+        /** Every material its color alone. */
+        public static final Cover PLAIN = new Cover(new Layer(null, null, null, 2), new Layer(null, null, null, 2),
+            Layer.PLAIN, Layer.PLAIN);
+    }
+
+    /**
+     * The material data of {@code rules} with the four layers' texture sets and the modifiers' surface materials'
+     * ({@code cover}).
+     */
+    @AllowAllocation("material data, made rarely")
+    public static MaterialData data(TerrainParameters rules, Layer rock, Layer grass, Layer scree, Layer snow,
+        Cover cover) {
+        MaterialData.Builder builder = builder(rules, rock, grass, scree, snow);
+        layer(builder, "gravel", cover.gravel());
+        layer(builder, "cobbles", cover.cobbles());
+        layer(builder, "dirt", cover.dirt());
+        layer(builder, "sand", cover.sand());
+        return builder.build();
+    }
+
     /** The material data of the rules and colors of {@code rules} with the four layers' texture sets. */
     @AllowAllocation("material data, made rarely")
     public static MaterialData data(TerrainParameters rules, Layer rock, Layer grass, Layer scree, Layer snow) {
+        return builder(rules, rock, grass, scree, snow).build();
+    }
+
+    @AllowAllocation("material data, made rarely")
+    private static MaterialData.Builder builder(TerrainParameters rules, Layer rock, Layer grass, Layer scree,
+        Layer snow) {
         MaterialData.Builder builder = MaterialData.builder(TYPE);
         try {
             for (RecordComponent component : TerrainParameters.class.getRecordComponents()) {
@@ -73,7 +105,7 @@ public final class TerrainMaterial {
         layer(builder, "grass", grass);
         layer(builder, "scree", scree);
         layer(builder, "snow", snow);
-        return builder.build();
+        return builder;
     }
 
     @AllowAllocation("material data, made rarely")

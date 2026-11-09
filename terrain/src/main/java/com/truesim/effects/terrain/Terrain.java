@@ -116,6 +116,18 @@ public final class Terrain implements AutoCloseable {
     @AllowAllocation("made once")
     public Terrain(World world, SceneResources resources, TerrainSite site, AssetRef<MaterialData> material,
         EngineSettings settings) {
+        this(world, resources, site, material, settings, com.truesim.effects.terrain.data.TerrainModifiers.NONE);
+    }
+
+    /**
+     * The terrain of {@code site} changed by {@code modifiers} (river beds, roads' cuts and fills, levelled squares and
+     * the surface materials they lay: {@link com.truesim.effects.terrain.data.TerrainModifier}), which its tiles and
+     * every CPU query follow. Work modifiers out from the unmodified surface ({@code surface().unmodified()}, or one
+     * made from the site and {@code TerrainSettings.surface(settings)}).
+     */
+    @AllowAllocation("made once")
+    public Terrain(World world, SceneResources resources, TerrainSite site, AssetRef<MaterialData> material,
+        EngineSettings settings, com.truesim.effects.terrain.data.TerrainModifiers modifiers) {
         this.world = Objects.requireNonNull(world, "world");
         this.scene = world.scene();
         this.resources = Objects.requireNonNull(resources, "resources");
@@ -124,7 +136,7 @@ public final class Terrain implements AutoCloseable {
         grid = new TerrainGrid(settings.get(TerrainSettings.TILE_SIZE), settings.get(TerrainSettings.TILE_QUADS),
             settings.get(TerrainSettings.LEVELS));
         SurfaceParameters detail = TerrainSettings.surface(settings);
-        surface = new TerrainSurface(site, detail);
+        surface = new TerrainSurface(site, detail, modifiers);
         meshes = new TileMeshes(surface, grid, settings.get(TerrainSettings.SKIRT_MARGIN),
             settings.get(TerrainSettings.CURVATURE_SCALE)).skirts(settings.get(TerrainSettings.SKIRTS))
             .layerScale(settings.get(TerrainSettings.LAYER_SCALE));
@@ -901,6 +913,15 @@ public final class Terrain implements AutoCloseable {
     /** The height of the terrain at ({@code x}, {@code z}), as the finest tiles draw it. */
     public double heightAt(double x, double z) {
         return surface.heightAt(x, z, grid.spacing(0));
+    }
+
+    /**
+     * The modifiers' surface materials at ({@code x}, {@code z}) as the finest tiles carry them (gravel, cobbles, dirt,
+     * sand: {@link com.truesim.effects.terrain.data.TerrainModifier}), into {@code cover}; returns their total cover
+     * (0: the material's layers alone).
+     */
+    public double materials(double x, double z, double[] cover) {
+        return surface.materials(x, z, grid.spacing(0), cover);
     }
 
     /** The unit normal at ({@code x}, {@code z}) of the finest tiles' triangle there, into {@code normal}. */

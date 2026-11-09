@@ -20,7 +20,9 @@ import com.truesim.scene.meshbuild.MeshBuilder;
  * level of detail, and an exact surface keeps the skirts' depth exact.
  *
  * <p>Vertices carry what the terrain material reads (terrain.slang): the planar position in UV0 + UV1, the altitude in
- * the color's red and green, the curvature in its blue.
+ * the color's red and green, the curvature in its blue; the modifiers' surface materials ({@link
+ * com.truesim.effects.terrain.data.TerrainModifier}) as their total cover in one less the color's alpha and their mix
+ * in the tangent ({@link #mix}).
  */
 @AllowAllocation("builds tiles in the background")
 public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData> {
@@ -32,8 +34,8 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
     public record TileMesh(long key, int morphTo) {
     }
 
-    private static final VertexFormat FORMAT = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.UV0,
-        VertexAttribute.UV1, VertexAttribute.COLOR);
+    private static final VertexFormat FORMAT = VertexFormat.of(VertexAttribute.NORMAL, VertexAttribute.TANGENT,
+        VertexAttribute.UV0, VertexAttribute.UV1, VertexAttribute.COLOR);
 
     private final TerrainSurface surface;
     private final TerrainGrid grid;
@@ -139,6 +141,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         float[] uv0 = new float[2 * vertices];
         float[] uv1 = new float[2 * vertices];
         float[] colors = new float[4 * vertices];
+        float[] tangents = new float[4 * vertices];
         double[] layer = layerField(level, x0, z0, height, a);
         double px0 = Math.floorMod((long) x0, (long) TerrainGrid.PLANAR_PERIOD) + (x0 - Math.floor(x0));
         double pz0 = Math.floorMod((long) z0, (long) TerrainGrid.PLANAR_PERIOD) + (z0 - Math.floor(z0));
@@ -167,6 +170,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 colors[4 * v + 3] = 1;
             }
         }
+        cover(x0, z0, s, colors, tangents);
         // Skirts: a copy of each edge's vertices, `depth` below
         int[] edge = new int[n + 1];
         int skirt = top;
@@ -203,6 +207,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 System.arraycopy(uv0, 2 * from, uv0, 2 * v, 2);
                 System.arraycopy(uv1, 2 * from, uv1, 2 * v, 2);
                 System.arraycopy(colors, 4 * from, colors, 4 * v, 4);
+                System.arraycopy(tangents, 4 * from, tangents, 4 * v, 4);
             }
             for (int k = 0; k < n; k++) {
                 int a0 = edge[k];
@@ -233,13 +238,108 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         }
         infos.put(key, new Info(TerrainError.tile(surface, grid, key), low, high));
         MeshBuilder builder = new MeshBuilder(FORMAT, vertices).pool(pool).positions(positions)
-            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
+            .attribute(VertexAttribute.NORMAL, normals).attribute(VertexAttribute.TANGENT, tangents)
+            .attribute(VertexAttribute.UV0, uv0).attribute(VertexAttribute.UV1, uv1)
             .attribute(VertexAttribute.COLOR, colors).submesh(indices);
         if (morphTo > level) {
             float[][] deltas = morphDeltas(level, morphTo, x0, z0, positions, normals, top, vertices);
             builder.morphTarget("coarser", deltas[0], deltas[1], null);
         }
         return builder.buildFlat();
+    }
+
+    /**
+     * The modifiers' surface materials at the top vertices: one less their total cover into the colors' alpha, their
+     * mix into the tangents ({@link #mix}); a vertex without cover takes the mix of its covered neighbours, so a
+     * material fades out at its shoulder as itself.
+     */
+    void cover(double x0, double z0, double s, float[] colors, float[] tangents) {
+        int n = grid.quads();
+        int count = (n + 1) * (n + 1);
+        double[] mixes = new double[2 * count];
+        boolean[] covered = new boolean[count];
+        double[] c = new double[com.truesim.effects.terrain.data.TerrainModifier.MATERIALS];
+        boolean any = false;
+        for (int j = 0; j <= n; j++) {
+            for (int i = 0; i <= n; i++) {
+                int v = j * (n + 1) + i;
+                double total = surface.modifiers().isEmpty() ? 0 : surface.materials(x0 + i * s, z0 + j * s, s, c);
+                colors[4 * v + 3] = Math.round(255 * (1 - Math.clamp(total, 0, 1))) / 255f;
+                if (total > 0) {
+                    mix(c, total, mixes, 2 * v);
+                    covered[v] = true;
+                    any = true;
+                }
+            }
+        }
+        for (int j = 0; any && j <= n; j++) {
+            for (int i = 0; i <= n; i++) {
+                int v = j * (n + 1) + i;
+                if (covered[v]) {
+                    continue;
+                }
+                double a = 0;
+                double b = 0;
+                int found = 0;
+                for (int dj = -1; dj <= 1; dj++) {
+                    for (int di = -1; di <= 1; di++) {
+                        int ni = i + di;
+                        int nj = j + dj;
+                        int w = nj * (n + 1) + ni;
+                        if (ni >= 0 && nj >= 0 && ni <= n && nj <= n && covered[w]) {
+                            a += mixes[2 * w];
+                            b += mixes[2 * w + 1];
+                            found++;
+                        }
+                    }
+                }
+                if (found > 0) {
+                    mixes[2 * v] = a / found;
+                    mixes[2 * v + 1] = b / found;
+                }
+            }
+        }
+        for (int v = 0; v < count; v++) {
+            encodeMix(mixes[2 * v], mixes[2 * v + 1], tangents, 4 * v);
+        }
+    }
+
+    /**
+     * The mix of the surface materials {@code cover} (total {@code total}) as two coordinates into {@code out} at
+     * {@code at}: corners gravel (0, 0), sand (1, 0), cobbles (0, 1) and dirt (1, 1), bilinear between (the pairs met
+     * along rivers and roads, gravel and sand, gravel and cobbles, sand and dirt, cobbles and dirt, blend exactly).
+     */
+    static void mix(double[] cover, double total, double[] out, int at) {
+        double sand = cover[com.truesim.effects.terrain.data.TerrainModifier.SAND] / total;
+        double cobbles = cover[com.truesim.effects.terrain.data.TerrainModifier.COBBLES] / total;
+        double dirt = cover[com.truesim.effects.terrain.data.TerrainModifier.DIRT] / total;
+        out[at] = Math.clamp(sand + dirt, 0, 1);
+        out[at + 1] = Math.clamp(cobbles + dirt, 0, 1);
+    }
+
+    /**
+     * Mix coordinates ({@code a}, {@code b}) as a unit tangent (the vertex format's octahedral direction, which the
+     * terrain material reads back, terrain.slang's {@code coverMix}): the point ((a - b) / 2, (a + b) / 2 - 1/2) of the
+     * octahedron's upper half, normalized; w 1.
+     */
+    static void encodeMix(double a, double b, float[] out, int at) {
+        double u = (a - b) / 2;
+        double v = (a + b) / 2 - 0.5;
+        double w = 1 - Math.abs(u) - Math.abs(v);
+        double length = Math.sqrt(u * u + v * v + w * w);
+        out[at] = (float) (u / length);
+        out[at + 1] = (float) (v / length);
+        out[at + 2] = (float) (w / length);
+        out[at + 3] = 1;
+    }
+
+    /** The mix coordinates a tangent written by {@link #encodeMix} carries: a and b into {@code out}. */
+    static void decodeMix(double x, double y, double z, double[] out) {
+        double l1 = Math.abs(x) + Math.abs(y) + Math.abs(z);
+        double u = x / l1;
+        double v = y / l1;
+        out[0] = v + 0.5 + u;
+        out[1] = v + 0.5 - u;
     }
 
     /** {@code value} as a high and a low float16 summing to it within a millimetre, at {@code at} of uv0 and uv1. */
