@@ -16,6 +16,9 @@ import java.util.Objects;
  *       level ground (meadows, the valley floor).</li>
  *   <li><b>Curvature:</b> the surface falls away by d^2 / 2R from the site's origin, so the far mountains sink below
  *       the horizon as they do.</li>
+ *   <li><b>Modifiers</b> ({@link TerrainModifiers}): river beds, roads' cuts and fills, levelled squares, in order,
+ *       each given the height the ones before left (without the curvature's fall); and the surface materials they lay
+ *       ({@link #materials}).</li>
  * </ul>
  *
  * <p>Thread-safe: tiles build on several threads at once.
@@ -28,10 +31,52 @@ public final class TerrainSurface {
 
     private final TerrainSite site;
     private final SurfaceParameters parameters;
+    private final TerrainModifiers modifiers;
 
     public TerrainSurface(TerrainSite site, SurfaceParameters parameters) {
+        this(site, parameters, TerrainModifiers.NONE);
+    }
+
+    /** The surface of {@code site} changed by {@code modifiers}. */
+    public TerrainSurface(TerrainSite site, SurfaceParameters parameters, TerrainModifiers modifiers) {
         this.site = Objects.requireNonNull(site, "site");
         this.parameters = Objects.requireNonNull(parameters, "parameters");
+        this.modifiers = Objects.requireNonNull(modifiers, "modifiers");
+    }
+
+    /** This surface with {@code newModifiers} in place of its own (the data and detail as they are). */
+    @com.truesim.annotations.AllowAllocation("a new surface, rarely")
+    public TerrainSurface withModifiers(TerrainModifiers newModifiers) {
+        return new TerrainSurface(site, parameters, newModifiers);
+    }
+
+    /** Its modifiers. */
+    public TerrainModifiers modifiers() {
+        return modifiers;
+    }
+
+    /** This surface without modifiers: the data and detail alone (what modifiers are worked out from). */
+    @com.truesim.annotations.AllowAllocation("a new surface, rarely")
+    public TerrainSurface unmodified() {
+        return modifiers.isEmpty() ? this : new TerrainSurface(site, parameters, TerrainModifiers.NONE);
+    }
+
+    /**
+     * The surface materials the modifiers lay at ({@code x}, {@code z}) sampled at {@code footprint}, into
+     * {@code cover} ({@link TerrainModifier#MATERIALS} entries: gravel, cobbles, dirt, sand); returns their total
+     * cover, 0 to 1 (0 where none: the terrain's own layers).
+     */
+    public double materials(double x, double z, double footprint, double[] cover) {
+        return modifiers.materials(x, z, footprint, cover);
+    }
+
+    /** {@code altitude} at ({@code x}, {@code z}) through the modifiers (which work on the height). */
+    private double modified(double x, double z, double footprint, double altitude) {
+        if (modifiers.isEmpty()) {
+            return altitude;
+        }
+        double fall = fall(x, z);
+        return modifiers.height(x, z, footprint, altitude - fall) + fall;
     }
 
     public TerrainSite site() {
@@ -49,7 +94,7 @@ public final class TerrainSurface {
     public double altitude(double x, double z, double footprint) {
         LocalFrame frame = site.frame();
         if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
-            return site.heightAtLatitude(x, frame.latitude(z), footprint);
+            return modified(x, z, footprint, site.heightAtLatitude(x, frame.latitude(z), footprint));
         }
         double step = Math.max(SLOPE_STEP, footprint);
         return altitude(x, z, footprint, frame.latitude(z), frame.latitude(z + step));
@@ -62,12 +107,12 @@ public final class TerrainSurface {
     public double altitude(double x, double z, double footprint, double lat, double latNext) {
         double base = site.heightAtLatitude(x, lat, footprint);
         if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
-            return base;
+            return modified(x, z, footprint, base);
         }
         double step = Math.max(SLOPE_STEP, footprint);
         double gx = (site.heightAtLatitude(x + step, lat, footprint) - base) / step;
         double gz = (site.heightAtLatitude(x, latNext, footprint) - base) / step;
-        return base + detail(x, z, footprint, gx, gz);
+        return modified(x, z, footprint, base + detail(x, z, footprint, gx, gz));
     }
 
     /** The step the detail's slope is taken over for samples {@code footprint} apart, metres. */

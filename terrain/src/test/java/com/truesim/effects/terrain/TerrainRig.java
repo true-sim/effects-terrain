@@ -177,7 +177,13 @@ final class TerrainRig implements AutoCloseable {
 
     /** The terrain of {@code site} with {@code material}, as the rig's settings say. */
     Terrain terrain(TerrainSite site, AssetRef<MaterialData> material) {
-        terrain = new Terrain(world, resources, site, material, settings);
+        return terrain(site, material, com.truesim.effects.terrain.data.TerrainModifiers.NONE);
+    }
+
+    /** The terrain of {@code site} changed by {@code modifiers}, with {@code material}. */
+    Terrain terrain(TerrainSite site, AssetRef<MaterialData> material,
+        com.truesim.effects.terrain.data.TerrainModifiers modifiers) {
+        terrain = new Terrain(world, resources, site, material, settings, modifiers);
         return terrain;
     }
 

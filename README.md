@@ -125,6 +125,52 @@ way the engine shades runs it (forward, the visibility buffer, ray and probe hit
 effects-weather's snow (`weather.snow`) covers it (tested; over steep terrain its occlusion map wants a bias of a
 texel's rise, `weather.snow.bias` 3 m at 1.6 m texels), effects-atmosphere's aerial perspective fogs it.
 
+## Modifiers: beds, roads, squares and the materials they lay
+
+What other libraries change in the terrain comes in as **terrain modifiers** (`TerrainModifier`, in
+`effects-terrain-data`), composed in order (`TerrainModifiers`): a river's bed and banks, a road's cut and fill, a
+levelled square, and the surface materials they lay into the terrain's own material (gravel, cobbles, dirt, sand)
+with soft shoulders. The tiles of every level, their morph targets and skirts, and every CPU query (`heightAt`,
+`normalAt`, `layers`, `materials`, and so what is placed on the terrain) read the modified surface.
+
+```java
+TerrainModifier roads = new TerrainModifier() {
+    public double height(double x, double z, double footprint, double height) {
+        return grading.height(x, z, height);                 // cut and fill: given the height below, the new one
+    }
+    public double materials(double x, double z, double footprint, double[] cover) {
+        double c = grading.cobbles(x, z);                   // 0 to 1, soft at the shoulders
+        cover[TerrainModifier.COBBLES] = c;
+        return c;                                           // the total cover laid here
+    }
+    public Bounds bounds() { return new Bounds(-600, -400, 900, 1200); }   // asked only within
+};
+TerrainModifiers all = TerrainModifiers.of(riverBeds).with(roads);       // roads over the rivers' gravel
+Terrain terrain = new Terrain(world, resources, site, material, settings, all);
+double[] cover = new double[TerrainModifier.MATERIALS];
+double laid = terrain.materials(x, z, cover);                            // gravel, cobbles, dirt, sand
+MaterialData data = TerrainMaterial.data(rules, rock, grass, scree, snow,
+    new TerrainMaterial.Cover(gravel, cobbles, dirt, sand));             // or Cover.PLAIN: colors alone
+```
+
+- **Heights** pass through each modifier in turn, in the frame the tiles are drawn in (without the curvature's fall):
+  each gets the height the surface and the modifiers before it make, and returns its own. The footprint (the grid's
+  spacing at that level) is given, so a feature narrower than it can fade rather than alias. Work modifiers out from
+  the unmodified surface (`surface().unmodified()`), as a river network or a settlement's grading needs the ground
+  before it is changed.
+- **Materials**: each modifier writes the cover of each material it lays (0 to 1) and returns their total; a later
+  modifier's lie over the earlier ones' as far as it covers (`earlier x (1 - c) + own`). The tiles carry the total
+  cover in one less the vertex color's alpha and the mix in the tangent (as a direction: corners gravel, sand, cobbles
+  and dirt; the pairs met along rivers and roads blend exactly), and an uncovered vertex beside covered ones takes
+  their mix, so a material fades out at its shoulder as itself. The terrain material lays the materials over its
+  layers with value noise breaking the shoulders' edges (`coverJitter`); each material is a texture set like the
+  layers' (`gravelAlbedo`, ..., `gravelSize`, ...) or its color alone (`gravelColor`, ...).
+- **Bounds** (optional): a modifier is asked only within them.
+- **Pure and thread-safe**, as the surface is: tiles build on several threads, and a point's answer must not depend
+  on what was asked before.
+- Modifiers are fixed when the terrain is made (a new set: a new `Terrain`, its tiles built again through the asset
+  cache).
+
 ## Shadows, global illumination, ray tracing
 
 Tiles are ordinary instances of pool meshes, so the shadow maps (cascades, atlas tiles) draw them and their culling,

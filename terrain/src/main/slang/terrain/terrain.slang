@@ -8,7 +8,9 @@
 //   COLOR.rg   the altitude above sea level (without the curvature's fall): (r * 255 * 256 + g * 255) / 8 - 1024
 //              metres, linear between vertices because the two bytes interpolate apart.
 //   COLOR.b    the curvature at terrain.layerScale: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave).
-//   COLOR.a    1.
+//   COLOR.a    one less the total cover of the modifiers' surface materials (1: the layers alone).
+//   TANGENT    the mix of those materials, as a direction (TileMeshes.encodeMix; coverMix here): corners gravel,
+//              sand, cobbles and dirt.
 //
 // The CPU twin of the layer rules is effects-terrain's TerrainLayers: keep them in step.
 module terrain;
@@ -60,7 +62,44 @@ public struct TerrainParameters
     [Range(0, 64)] public float triplanarSharpness = 6;  // how sharply rock's three projections part (1 and up)
     [Range(0, 1)] public float macro = 0.25;             // how much large-scale variation tints the layers
     [Range(0, 4)] public float normalStrength = 1;
+    // The modifiers' surface materials, laid over the layers where the tiles carry their cover (TerrainModifier):
+    // gravel (river beds and bars, gravel roads), cobbles (streets), dirt (tracks), sand (river margins)
+    [Texture(SRGB)] public int gravelAlbedo = -1;
+    [Texture(LINEAR)] public int gravelNormal = -1;
+    [Texture(LINEAR)] public int gravelRoughness = -1;
+    [Color] public float3 gravelColor = float3(0.30, 0.29, 0.27);
+    public float gravelSize = 2;
+    [Texture(SRGB)] public int cobblesAlbedo = -1;
+    [Texture(LINEAR)] public int cobblesNormal = -1;
+    [Texture(LINEAR)] public int cobblesRoughness = -1;
+    [Color] public float3 cobblesColor = float3(0.24, 0.23, 0.22);
+    public float cobblesSize = 2;
+    [Texture(SRGB)] public int dirtAlbedo = -1;
+    [Texture(LINEAR)] public int dirtNormal = -1;
+    [Texture(LINEAR)] public int dirtRoughness = -1;
+    [Color] public float3 dirtColor = float3(0.26, 0.19, 0.13);
+    public float dirtSize = 4;
+    [Texture(SRGB)] public int sandAlbedo = -1;
+    [Texture(LINEAR)] public int sandNormal = -1;
+    [Texture(LINEAR)] public int sandRoughness = -1;
+    [Color] public float3 sandColor = float3(0.45, 0.41, 0.33);
+    public float sandSize = 4;
+    [Range(0, 1)] public float coverJitter = 0.5;        // how much noise breaks the shoulders' edges
+    [Range(0, 1)] public float coverRoughness = 0.85;    // the materials' roughness without textures
 };
+
+/**
+ * The mix of the modifiers' materials a tile's tangent carries (TileMeshes.encodeMix): their weights, gravel, sand,
+ * cobbles, dirt, summing to 1, bilinear between the corners.
+ */
+public float4 coverMix(float3 t)
+{
+    float l1 = abs(t.x) + abs(t.y) + abs(t.z);
+    float2 uv = l1 > 1e-6 ? t.xy / l1 : float2(0, -0.5);
+    float a = saturate(uv.y + 0.5 + uv.x);
+    float b = saturate(uv.y + 0.5 - uv.x);
+    return float4((1 - a) * (1 - b), a * (1 - b), (1 - a) * b, a * b);
+}
 
 /** The layer weights the rules give: rock, grass, scree, snow (summing to 1). */
 public float4 terrainLayers(TerrainParameters p, float altitude, float slope, float curvature, float jitter)
@@ -222,6 +261,49 @@ public struct TerrainType : IMaterial
         // Large-scale variation, so wide slopes do not repeat
         float macro = valueNoise(xz, 128) * 0.6 + valueNoise(xz, 32) * 0.4;
         albedo *= 1 + (macro - 0.5) * 2 * p.macro;
+
+        // The modifiers' surface materials over the layers, their shoulders broken by noise
+        float cover = saturate(1 - in.color.a);
+        if (cover > 0.002)
+        {
+            float edge = valueNoise(xz, 1) * 0.6 + valueNoise(xz, 0.25) * 0.4;
+            cover = saturate(cover + (edge - 0.5) * 2 * p.coverJitter * cover * (1 - cover) * 4);
+            cover = smoothstep(0.0, 1.0, cover);
+            float4 mix = coverMix(in.tangent.xyz);
+            float3 ca = 0;
+            float cr = 0;
+            float3 cn = 0;
+            [ForceUnroll]
+            for (int k = 0; k < 4; k++)
+            {
+                float weight = mix[k];
+                if (weight <= 0.001)
+                {
+                    continue;
+                }
+                int a = k == 0 ? p.gravelAlbedo : k == 1 ? p.sandAlbedo : k == 2 ? p.cobblesAlbedo : p.dirtAlbedo;
+                int r = k == 0 ? p.gravelRoughness : k == 1 ? p.sandRoughness : k == 2 ? p.cobblesRoughness : p.dirtRoughness;
+                int nm = k == 0 ? p.gravelNormal : k == 1 ? p.sandNormal : k == 2 ? p.cobblesNormal : p.dirtNormal;
+                float3 c = k == 0 ? p.gravelColor : k == 1 ? p.sandColor : k == 2 ? p.cobblesColor : p.dirtColor;
+                float size = max(k == 0 ? p.gravelSize : k == 1 ? p.sandSize : k == 2 ? p.cobblesSize : p.dirtSize, 0.01);
+                float2 uv = xz / size;
+                float4 ar = layerColor(a, r, c, uv, dxz / size, dyz / size);
+                if (r < 0)
+                {
+                    ar.w = p.coverRoughness;
+                }
+                float3 t = layerNormal(nm, uv, dxz / size, dyz / size, p.normalStrength);
+                ca += ar.rgb * weight;
+                cr += ar.w * weight;
+                cn += float3(t.x + n.x, abs(t.z) * n.y, t.y + n.z) * weight;
+            }
+            // without textures, a little grain so the materials read as ground
+            float grain = valueNoise(xz, 0.125) * 0.5 + valueNoise(xz, 0.5) * 0.5;
+            ca *= 0.8 + 0.4 * grain;
+            albedo = lerp(albedo, ca, cover);
+            roughness = lerp(roughness, cr, cover);
+            normal = lerp(normal, cn, cover);
+        }
 
         float3 shaded = normalize(normal);
         if (!all(isfinite(shaded)) || dot(shaded, n) <= 0)
