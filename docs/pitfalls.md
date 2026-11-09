@@ -145,3 +145,16 @@ wall drawn by tiles of 256 m.
 
 **Rule.** The relief's error is measured against the finest level's relief (`TerrainError.tile` with the cliff
 settings): the same view then shows 7 refined tiles, the levels 4, 15, 8, 9, 13, 14.
+
+## Negative tangent signs on the terrain's tiles crash CI's lavapipe
+
+**What happened.** Flagging a wall's vertices for the material by their tangent's sign (w = -1) made CI's shard 2 die
+in `LodPopTest` (the synthetic range, whose steep faces refine) three times in a row: SIGSEGV in lavapipe's compiled
+shader code on a worker thread (`hs_err`: frames in `libvulkan_lvp.so`, SEGV_MAPERR), on an AMD EPYC 7763. The same
+tests passed on the local lavapipe (Mesa 26.2.6, Windows, also with `LP_NATIVE_VECTOR_WIDTH=256`) and on the RX 9070
+XT. Bisected on CI (workflow_dispatch): the branch without the flag passed, the branch with the flag and the shader as
+released crashed; so the sign alone, not the shader reading it. Cause in lavapipe or the engine not found.
+
+**Rule.** Data for the material does not go in the tangent's sign; the wall flag is the tangent's direction
+((0, -0.6, -0.8), y + z below 0). Proof: runs 42653968325 (three attempts), 42661161606 (no flag: green),
+42661168328 (flag, old shader: SIGSEGV).

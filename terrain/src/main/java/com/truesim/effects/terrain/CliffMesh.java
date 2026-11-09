@@ -385,10 +385,14 @@ public final class CliffMesh {
             if (w <= 0) {
                 continue;
             }
-            // the wall flagged for the material by the tangent's sign (its xyz carries the cover's mix; the sign
-            // survives the deformation pass that morphs tiles, which turns the tangent's direction)
+            // the wall flagged for the material by its tangent (which elsewhere carries the cover's mix, always with
+            // y + z >= 0; a wall's (0, -0.6, -0.8) keeps y + z below 0 through the deformation pass that morphs tiles,
+            // which turns the tangent square to the normal). Not by the tangent's sign: tiles with negative signs
+            // crashed lavapipe on CI's EPYC 7763 (SIGSEGV in its shader code, three runs; docs/pitfalls.md)
             if (w >= 0.5) {
-                verts.tangents[4 * v + 3] = -1;
+                verts.tangents[4 * v] = 0;
+                verts.tangents[4 * v + 1] = -0.6f;
+                verts.tangents[4 * v + 2] = -0.8f;
             }
             double ox = p[0];
             double oy = p[1];

@@ -148,9 +148,10 @@ a texture's varying round it), projected three ways with `cliffSharpness`; then
   warmer fresh rockfall scars (`scars`); lichen patches (`lichen`, `lichenColor`), more where the wall is less steep;
   wet darkening at the walls' foot, where the ground turns concave (`wetFoot`);
 - **the ledges** of a wall whose relief is in the mesh: weathered limestone and grey debris (`ledgeColor`) with a
-  little lichen (`ledgeLichen`), not the slopes' layers. The tiles flag a wall's vertices by their tangent's sign
-  (its direction carries the modifiers' cover mix; the sign survives the deformation pass that morphs tiles), and the
-  material gives everything flagged the cliff layer whatever its slope.
+  little lichen (`ledgeLichen`), not the slopes' layers. The tiles flag a wall's vertices by their tangent ((0, -0.6,
+  -0.8): y + z below 0, where the modifiers' cover mix it carries elsewhere never goes, and still below 0 after the
+  deformation pass that morphs tiles turns it square to the normal), and the material gives everything flagged the
+  cliff layer whatever its slope.
 
 **The geometry: relief on the walls** (`CliffParameters`, `terrain.cliffs.*`), only where the data's slope passes
 `terrain.cliffs.slopeStart` (55 degrees, all of it from 60), every feature a horizontal shift of the wall, out of it

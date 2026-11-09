@@ -10,8 +10,8 @@
 //   COLOR.b    the curvature at terrain.layerScale: 0.5 + 0.5 * c, c from -1 (convex: ridges) to 1 (concave).
 //   COLOR.a    one less the total cover of the modifiers' surface materials (1: the layers alone).
 //   TANGENT    the mix of those materials, as a direction (TileMeshes.encodeMix; coverMix here): corners gravel,
-//              sand, cobbles and dirt; its sign (w) -1 on a wall whose relief is in the mesh (CliffMesh), so the
-//              wall's ledges take the cliff layer whatever their slope.
+//              sand, cobbles and dirt (always y + z >= 0); (0, -0.6, -0.8) on a wall whose relief is in the mesh
+//              (CliffMesh), so the wall's ledges take the cliff layer whatever their slope.
 //
 // The CPU twin of the layer rules is effects-terrain's TerrainLayers: keep them in step.
 module terrain;
@@ -415,8 +415,8 @@ public struct TerrainType : IMaterial
         }
         // Cliffs: the walls' share of rock
         // the walls' share: rock's past the cliffs' slope, and everything on a wall (the tiles flag a wall's vertices by
-        // their tangent's sign: its ledges stay limestone and debris, not the slopes' layers)
-        float wall = saturate(0.5 - 0.5 * in.tangent.w);
+        // their tangent, y + z below 0 where the cover's mix never goes: its ledges stay limestone and debris)
+        float wall = saturate(-(in.tangent.y + in.tangent.z) * 1.5 - 0.2);
         float rockCliff = w.x * cliffShare(p, slope + (noise - 0.5) * 2 * p.jitter * 4);
         float cliff = max(rockCliff, wall * (1 - w.w));
         w.x -= rockCliff;
