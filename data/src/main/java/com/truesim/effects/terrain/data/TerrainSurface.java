@@ -1,5 +1,6 @@
 package com.truesim.effects.terrain.data;
 
+import com.truesim.common.math.Maths;
 import java.util.Objects;
 
 /**
@@ -93,7 +94,7 @@ public final class TerrainSurface {
      */
     public double altitude(double x, double z, double footprint) {
         LocalFrame frame = site.frame();
-        if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
+        if (!detailed() && !parameters.cliffs().any()) {
             return modified(x, z, footprint, site.heightAtLatitude(x, frame.latitude(z), footprint));
         }
         double step = Math.max(SLOPE_STEP, footprint);
@@ -106,13 +107,281 @@ public final class TerrainSurface {
      */
     public double altitude(double x, double z, double footprint, double lat, double latNext) {
         double base = site.heightAtLatitude(x, lat, footprint);
-        if (parameters.amplitude() <= 0 || parameters.octaves() == 0) {
+        boolean relief = parameters.cliffs().any();
+        if (!detailed() && !relief) {
             return modified(x, z, footprint, base);
         }
         double step = Math.max(SLOPE_STEP, footprint);
         double gx = (site.heightAtLatitude(x + step, lat, footprint) - base) / step;
         double gz = (site.heightAtLatitude(x, latNext, footprint) - base) / step;
-        return modified(x, z, footprint, base + detail(x, z, footprint, gx, gz));
+        double h = relief ? cliff(x, z, footprint, base, gx, gz, lat, latNext, step) : base;
+        if (!detailed()) {
+            return modified(x, z, footprint, h);
+        }
+        return modified(x, z, footprint, h + detail(x, z, footprint, gx, gz));
+    }
+
+    private boolean detailed() {
+        return parameters.amplitude() > 0 && parameters.octaves() > 0;
+    }
+
+    /**
+     * The data's height at ({@code x}, {@code z}) with the cliff relief ({@link CliffParameters}) carved in, given the
+     * data's height {@code base} there, its slope ({@code gx}, {@code gz}) over {@code step} metres and the latitudes
+     * of {@code z} and {@code z + step}: the face shifted horizontally, out of the wall or into it, by reading the
+     * data a little up or down its slope.
+     */
+    double cliff(double x, double z, double footprint, double base, double gx, double gz, double lat, double latNext,
+        double step) {
+        CliffParameters c = parameters.cliffs();
+        double g = Math.sqrt(gx * gx + gz * gz);
+        double weight = c.weight(Maths.toDegrees(Maths.atan(g)));
+        if (weight <= 0) {
+            return base;
+        }
+        double shift = c.relief() == CliffParameters.Relief.HEIGHT ? cliffShift(x, z, footprint, base, gx, gz) : 0;
+        double sx = shift * gx / g;
+        double sz = shift * gz / g;
+        // latitudes linear over the slope's step (metres north-south are near linear in latitude)
+        double perMetre = (latNext - lat) / step;
+        double lat0 = lat + perMetre * sz;
+        double r = 0.5 * c.smoothing();
+        if (r <= 0) {
+            return shift == 0 ? base : site.heightAtLatitude(x + sx, lat0, footprint);
+        }
+        // a box over the bilinear samples: a quadratic B-spline over the data's grid, no creases
+        double south = lat0 + perMetre * r;
+        double north = lat0 - perMetre * r;
+        double smooth = 0.25 * (site.heightAtLatitude(x + sx - r, north, footprint)
+            + site.heightAtLatitude(x + sx + r, north, footprint) + site.heightAtLatitude(x + sx - r, south, footprint)
+            + site.heightAtLatitude(x + sx + r, south, footprint));
+        return base + weight * (smooth - base);
+    }
+
+    /**
+     * How far the cliff relief shifts the face at ({@code x}, {@code z}) horizontally, metres up its slope (out of the
+     * wall: positive) or down it (into the wall: negative), for a grid {@code footprint} apart; 0 where the slope
+     * ({@code gx}, {@code gz}) is below the relief's.
+     */
+    public double cliffShift(double x, double z, double footprint, double base, double gx, double gz) {
+        CliffParameters c = parameters.cliffs();
+        double g = Math.sqrt(gx * gx + gz * gz);
+        double weight = c.weight(Maths.toDegrees(Maths.atan(g)));
+        if (weight <= 0 || g <= 0) {
+            return 0;
+        }
+        double shift = 0;
+        // Bedding: terraces of the beds, each bed's top a ledge `ledge` wide (as far as its thickness allows), its
+        // face below steeper than the wall: the bed leans out over the one below
+        double t = c.bedThickness();
+        double tread = Math.min(c.ledge() * g / t, 0.75); // the share of each bed's height the ledge takes
+        // a bed shows where the grid has vertices enough up the wall: a bed's height over the rise between two
+        double fade = fade(t, footprint * Math.max(g, 1));
+        if (tread > 0 && fade > 0) {
+            double phase = bedPhase(x, z, base, c);
+            double riser = 1 - tread;
+            // the staircase: up the riser to the bed's top, then level along the ledge, its corners rounded
+            double stair = softMin(phase / riser, 1, 0.12);
+            shift += weight * fade * t * (stair - phase) / g;
+        }
+        // Joints: two vertical sets at right angles, clefts into the wall, some missing
+        double width = c.jointWidth();
+        fade = fade(width, footprint);
+        if (c.jointDepth() > 0 && fade > 0) {
+            double a = Maths.toRadians(c.jointAzimuth());
+            double cleft = Math.max(joint(x * Maths.cos(a) + z * Maths.sin(a), x, z, c, 0),
+                joint(-x * Maths.sin(a) + z * Maths.cos(a), x, z, c, 1));
+            shift -= weight * fade * c.jointDepth() * cleft;
+        }
+        // Buttresses: ribs out of the wall and bays into it
+        fade = fade(c.buttressLength() / 4, footprint);
+        if (c.buttressDepth() > 0 && fade > 0) {
+            double l = c.buttressLength();
+            double n = Noise.noise(x / l, z / l, SEED + 103, null) + 0.5 * Noise.noise(2 * x / l, 2 * z / l,
+                SEED + 104, null);
+            shift += weight * fade * c.buttressDepth() * n;
+        }
+        return shift;
+    }
+
+    /**
+     * Where ({@code x}, {@code z}) at {@code altitude} is in its bed: 0 at the bed's foot to 1 at its top (the beds
+     * dipping, waving and varying in thickness as {@code c} says).
+     */
+    private static double bedPhase(double x, double z, double altitude, CliffParameters c) {
+        double q = bedCoordinate(x, z, altitude, c);
+        return q - Math.floor(q);
+    }
+
+    /** Which bed ({@code x}, {@code z}) at {@code altitude} is in, and how far up it: the integer part, the fraction. */
+    private static double bedCoordinate(double x, double z, double altitude, CliffParameters c) {
+        double a = Maths.toRadians(c.dipAzimuth());
+        double along = x * Maths.sin(a) - z * Maths.cos(a); // towards the dip
+        double bed = altitude + Maths.tan(Maths.toRadians(c.dip())) * along
+            + c.waviness() * 1.4 * Noise.noise(x / c.wavinessLength(), z / c.wavinessLength(), SEED + 101, null);
+        double q = bed / c.bedThickness();
+        return q + c.bedVariation() * 1.4 * Noise.noise(q / 3, 0.5, SEED + 102, null);
+    }
+
+    /**
+     * The surface's point at ({@code x}, {@code z}) for a grid {@code footprint} apart with the cliff relief in the
+     * mesh ({@link CliffParameters.Relief#MESH}): its height (as {@link #height}) into {@code out[1]}, and the
+     * horizontal shift of the wall there into {@code out[0]} (x) and {@code out[2]} (z): out of the wall where
+     * positive along its outward normal; the data's slope there (its rise per metre) into {@code out[3]}; on a cliff,
+     * the moved wall's unit normal into {@code out[4]} to {@code out[6]} (seven entries).
+     * {@code vertical} is the mesh's vertices' spacing up the wall there, metres (0 or less: the footprint times the
+     * slope's rise, a grid's): beds closer than it can hold fade out. Returns how much of a cliff the point is (0:
+     * none, no shift).
+     */
+    public double cliffPoint(double x, double z, double footprint, double vertical, double[] out) {
+        LocalFrame frame = site.frame();
+        double step = Math.max(SLOPE_STEP, footprint);
+        double lat = frame.latitude(z);
+        double latNext = frame.latitude(z + step);
+        double base = site.heightAtLatitude(x, lat, footprint);
+        double gx = (site.heightAtLatitude(x + step, lat, footprint) - base) / step;
+        double gz = (site.heightAtLatitude(x, latNext, footprint) - base) / step;
+        CliffParameters c = parameters.cliffs();
+        double h = c.any() ? cliff(x, z, footprint, base, gx, gz, lat, latNext, step) : base;
+        if (detailed()) {
+            h += detail(x, z, footprint, gx, gz);
+        }
+        double altitude = modified(x, z, footprint, h);
+        out[0] = 0;
+        out[1] = altitude - fall(x, z);
+        out[2] = 0;
+        double g = Math.sqrt(gx * gx + gz * gz);
+        out[3] = g;
+        if (c.relief() != CliffParameters.Relief.MESH || g <= 0) {
+            return 0;
+        }
+        double weight = c.weight(Maths.toDegrees(Maths.atan(g)));
+        if (weight <= 0) {
+            return 0;
+        }
+        double spacing = vertical > 0 ? vertical : footprint * Math.max(g, 1);
+        double d = weight * meshShift(x, z, footprint, spacing, altitude, c);
+        double ux = gx / g; // up the slope
+        double uz = gz / g;
+        out[0] = -d * ux;
+        out[2] = -d * uz;
+        // The moved wall's normal: its tangents up the slope and along it, each with the shift's change that way
+        double da = 0.1;
+        double up = weight * (meshShift(x, z, footprint, spacing, altitude + da, c)
+            - meshShift(x, z, footprint, spacing, altitude - da, c)) / (2 * da) * g; // per metre in, up the slope
+        double ds = 0.25;
+        double along = weight * (meshShift(x - uz * ds, z + ux * ds, footprint, spacing, altitude, c)
+            - meshShift(x + uz * ds, z - ux * ds, footprint, spacing, altitude, c)) / (2 * ds);
+        double upX = ux * (1 - up);
+        double upY = g;
+        double upZ = uz * (1 - up);
+        double alX = -uz - ux * along;
+        double alZ = ux - uz * along;
+        // along x up
+        double nx = -alZ * upY;
+        double ny = alZ * upX - alX * upZ;
+        double nz = alX * upY;
+        double l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        out[4] = nx / l;
+        out[5] = ny / l;
+        out[6] = nz / l;
+        return weight;
+    }
+
+    /**
+     * How much of a cliff ({@link CliffParameters#weight}) the data's slope over {@code max(16, footprint)} metres makes
+     * at ({@code x}, {@code z}): where the mesh's relief goes (0: none).
+     */
+    public double cliffWeight(double x, double z, double footprint) {
+        CliffParameters c = parameters.cliffs();
+        if (!c.any()) {
+            return 0;
+        }
+        LocalFrame frame = site.frame();
+        double step = Math.max(SLOPE_STEP, footprint);
+        double lat = frame.latitude(z);
+        double base = site.heightAtLatitude(x, lat, footprint);
+        double gx = (site.heightAtLatitude(x + step, lat, footprint) - base) / step;
+        double gz = (site.heightAtLatitude(x, frame.latitude(z + step), footprint) - base) / step;
+        return c.weight(Maths.toDegrees(Maths.atan(Math.sqrt(gx * gx + gz * gz))));
+    }
+
+    /**
+     * The mesh relief's shift out of the wall at ({@code x}, {@code z}) and {@code altitude}, metres: the beds (a soft
+     * band at each one's foot weathered back, so the hard bed above overhangs it and the one below ends in a ledge;
+     * each hard bed leaning back a little as it rises), the joints' clefts, the buttresses.
+     */
+    static double meshShift(double x, double z, double footprint, double vertical, double altitude,
+        CliffParameters c) {
+        double shift = 0;
+        double fade = fade(0.3 * c.bedThickness(), vertical);
+        if (c.ledge() > 0 && fade > 0) {
+            double q = bedCoordinate(x, z, altitude, c);
+            double bed = Math.floor(q);
+            double phase = q - bed;
+            // each bed its own: how deep its soft band is weathered (some not at all), how thick that band is,
+            // how much it leans; and along the wall the notches deepen and fade
+            long h = Noise.hash((long) bed, 7, SEED + 105);
+            double depth = (h >>> 11) * 0x1.0p-53;
+            depth = depth < 0.2 ? 0 : 0.3 + 0.7 * depth;
+            double band = 0.18 + 0.2 * ((h >>> 3) & 0xff) / 255.0;
+            double lean = 0.15 + 0.4 * ((h >>> 20) & 0xff) / 255.0;
+            double lateral = Math.clamp(0.55 + 1.2 * Noise.noise(x / 55, z / 55, SEED + 106, null), 0, 1);
+            double notch = smooth(0, 0.1, phase) * (1 - smooth(band, band + 0.12, phase)) * depth * lateral;
+            shift += fade * c.ledge() * (0.5 + 0.5 * lean - notch - lean * phase);
+        }
+        fade = fade(c.jointWidth(), footprint);
+        if (c.jointDepth() > 0 && fade > 0) {
+            double a = Maths.toRadians(c.jointAzimuth());
+            double cleft = Math.max(joint(x * Maths.cos(a) + z * Maths.sin(a), x, z, c, 0),
+                joint(-x * Maths.sin(a) + z * Maths.cos(a), x, z, c, 1));
+            shift -= fade * c.jointDepth() * cleft;
+        }
+        fade = fade(c.buttressLength() / 4, footprint);
+        if (c.buttressDepth() > 0 && fade > 0) {
+            double l = c.buttressLength();
+            double n = Noise.noise(x / l, z / l, SEED + 103, null) + 0.5 * Noise.noise(2 * x / l, 2 * z / l,
+                SEED + 104, null);
+            shift += fade * c.buttressDepth() * n;
+        }
+        return shift;
+    }
+
+    private static double smooth(double edge0, double edge1, double x) {
+        double t = Math.clamp((x - edge0) / (edge1 - edge0), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    /**
+     * How much of a joint of {@code c} at {@code across} metres across its set ({@code set}) the point ({@code x},
+     * {@code z}) is in: 1 at its middle, 0 outside.
+     */
+    private static double joint(double across, double x, double z, CliffParameters c, int set) {
+        double spacing = c.jointSpacing();
+        double u = across / spacing + 0.35 * Noise.noise(x / (3 * spacing), z / (3 * spacing), SEED + 110 + set,
+            null);
+        double nearest = Math.rint(u);
+        long h = Noise.hash((long) nearest, set, SEED + 120);
+        if ((h >>> 11) * 0x1.0p-53 > 0.6) {
+            return 0;
+        }
+        double d = Math.abs(u - nearest) * spacing / (0.5 * c.jointWidth());
+        if (d >= 1) {
+            return 0;
+        }
+        double k = 1 - d * d;
+        return k * k;
+    }
+
+    /** How much of a feature {@code size} metres across a grid {@code footprint} apart shows: none below 1.5 grid steps, all from 3. */
+    static double fade(double size, double footprint) {
+        return Math.clamp((size / footprint - 1.5) / 1.5, 0, 1);
+    }
+
+    /** The smaller of {@code a} and {@code b}, rounded over {@code k} (polynomial smooth minimum). */
+    private static double softMin(double a, double b, double k) {
+        double h = Math.clamp(0.5 + 0.5 * (b - a) / k, 0, 1);
+        return b + (a - b) * h - k * h * (1 - h);
     }
 
     /** The step the detail's slope is taken over for samples {@code footprint} apart, metres. */

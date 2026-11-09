@@ -68,9 +68,30 @@ class TerrainLayersTest {
     }
 
     @Test
+    void cliffsTakeRocksPlaceFromTheirStartToTheirEnd() {
+        assertThat(TerrainLayers.cliff(RULES, RULES.cliffSlopeStart() - 1)).isZero();
+        assertThat(TerrainLayers.cliff(RULES, RULES.cliffSlopeStart())).isZero();
+        assertThat(TerrainLayers.cliff(RULES, 0.5 * (RULES.cliffSlopeStart() + RULES.cliffSlopeEnd())))
+            .isCloseTo(0.5, within(1e-9));
+        assertThat(TerrainLayers.cliff(RULES, RULES.cliffSlopeEnd())).isEqualTo(1);
+        assertThat(TerrainLayers.cliff(RULES, 90)).isEqualTo(1);
+        assertThat(RULES.cliffSlopeStart()).as("from about 50 degrees").isCloseTo(50, within(1e-6f));
+        assertThat(RULES.cliffSlopeEnd()).as("whole by about 60").isCloseTo(60, within(1e-6f));
+        double before = 0;
+        for (double s = 40; s <= 70; s += 0.5) {
+            double share = TerrainLayers.cliff(RULES, s);
+            assertThat(share).isGreaterThanOrEqualTo(before);
+            before = share;
+        }
+        // a cliff's rock is the walls' limestone; rock below the cliffs' slope is rock still
+        assertThat(cpu(1500, 70, 0)[TerrainLayers.ROCK] * TerrainLayers.cliff(RULES, 70)).isEqualTo(1, within(1e-9));
+        assertThat(cpu(1500, 45, 0)[TerrainLayers.ROCK] * TerrainLayers.cliff(RULES, 45)).isZero();
+    }
+
+    @Test
     void theCpuTwinGivesWhatTheShaderGives() {
         int count = 0;
-        float[] points = new float[4 * 4096];
+        float[] points = new float[4 * 4096 + 4 * 400];
         for (double a = 300; a < 4600 && count < 4096; a += 97) {
             for (double s = 0; s <= 90 && count < 4096; s += 3.5) {
                 for (double c = -1; c <= 1.001 && count < 4096; c += 0.5) {
@@ -81,13 +102,22 @@ class TerrainLayersTest {
                 }
             }
         }
+        int layers = count;
+        for (double s = 0; s <= 90; s += 0.25) { // the cliff's share
+            points[4 * count + 1] = (float) s;
+            points[4 * count + 3] = 1;
+            count++;
+        }
         float[] gpu;
         try (TestGpu test = TestGpu.open()) {
             gpu = run(test.device(), points, count);
             test.assertNoValidationErrors("the layers kernel");
         }
         double worst = 0;
-        for (int i = 0; i < count; i++) {
+        for (int i = layers; i < count; i++) {
+            worst = Math.max(worst, Math.abs(TerrainLayers.cliff(RULES, points[4 * i + 1]) - gpu[4 * i]));
+        }
+        for (int i = 0; i < layers; i++) {
             double[] w = cpu(points[4 * i], points[4 * i + 1], points[4 * i + 2]);
             for (int k = 0; k < 4; k++) {
                 worst = Math.max(worst, Math.abs(w[k] - gpu[4 * i + k]));

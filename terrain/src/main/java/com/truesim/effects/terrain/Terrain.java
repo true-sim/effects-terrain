@@ -139,7 +139,10 @@ public final class Terrain implements AutoCloseable {
         surface = new TerrainSurface(site, detail, modifiers);
         meshes = new TileMeshes(surface, grid, settings.get(TerrainSettings.SKIRT_MARGIN),
             settings.get(TerrainSettings.CURVATURE_SCALE)).skirts(settings.get(TerrainSettings.SKIRTS))
-            .layerScale(settings.get(TerrainSettings.LAYER_SCALE));
+            .layerScale(settings.get(TerrainSettings.LAYER_SCALE))
+            .cliffs(new CliffMesh.Settings(settings.get(TerrainSettings.CLIFF_STEP),
+                settings.get(TerrainSettings.CLIFF_LEVELS), settings.get(TerrainSettings.CLIFF_ROUNDS),
+                settings.get(TerrainSettings.CLIFF_VERTICES)));
         layer = Layer.of("terrain " + site.id(), Long.class, Levels.grid(grid.tileSize(), grid.levels()));
         errors = TerrainError.measure(surface, grid, settings.get(TerrainSettings.RANGE),
             settings.get(TerrainSettings.ERROR_SAMPLES));

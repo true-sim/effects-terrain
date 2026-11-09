@@ -2,6 +2,7 @@ package com.truesim.effects.terrain;
 
 import com.truesim.annotations.AllowAllocation;
 import com.truesim.common.math.Maths;
+import com.truesim.effects.terrain.data.CliffParameters;
 import com.truesim.effects.terrain.data.TerrainSurface;
 
 /**
@@ -69,6 +70,56 @@ public final class TerrainError {
                 double gx = (h[at + 1] - h[at - 1]) / (2 * fine);
                 double gz = (h[at + a] - h[at - a]) / (2 * fine);
                 worst = Math.max(worst, Math.abs(triangles - h[at]) / Math.sqrt(1 + gx * gx + gz * gz));
+            }
+        }
+        return worst;
+    }
+
+    /**
+     * {@link #tile(TerrainSurface, TerrainGrid, long)} with the cliffs' relief in the mesh ({@code MESH}) counted too:
+     * how far the tile's relief (its beds faded to its vertices' spacing up the wall, its joints and buttresses to its
+     * grid's) lies from the finest level's, at every finer vertex on a wall (against the finest: each level fades a
+     * little more than the one below, and those little steps add up). So a wall's tiles split where their relief
+     * would show coarser than the allowed pixels, as their heights do.
+     */
+    @AllowAllocation("with a tile's build, in the background")
+    public static double tile(TerrainSurface surface, TerrainGrid grid, long key, CliffMesh.Settings cliffs) {
+        double worst = tile(surface, grid, key);
+        int level = TerrainGrid.level(key);
+        CliffParameters c = surface.parameters().cliffs();
+        if (level == 0 || c.relief() != CliffParameters.Relief.MESH || !c.any()) {
+            return worst;
+        }
+        double size = grid.size(level);
+        double coarse = grid.spacing(level);
+        double fine = grid.spacing(level - 1);
+        double x0 = TerrainGrid.x(key) * size;
+        double z0 = TerrainGrid.z(key) * size;
+        double coarseStep = level < cliffs.levels() ? cliffs.step(level) : -1;
+        double finest = grid.spacing(0);
+        double finestStep = cliffs.levels() > 0 ? cliffs.step(0) : -1;
+        // walls anywhere? (a lattice of 33 a side: none on most tiles, which end here)
+        boolean walls = false;
+        for (int j = 0; j <= 32 && !walls; j++) {
+            for (int i = 0; i <= 32 && !walls; i++) {
+                walls = surface.cliffWeight(x0 + i * size / 32, z0 + j * size / 32, fine) > 0;
+            }
+        }
+        if (!walls) {
+            return worst;
+        }
+        int steps = 2 * grid.quads();
+        double[] a = new double[7];
+        double[] b = new double[7];
+        for (int j = 0; j <= steps; j++) {
+            for (int i = 0; i <= steps; i++) {
+                double x = x0 + i * fine;
+                double z = z0 + j * fine;
+                if (surface.cliffPoint(x, z, finest, finestStep, b) <= 0) {
+                    continue;
+                }
+                surface.cliffPoint(x, z, coarse, coarseStep, a);
+                worst = Math.max(worst, Maths.hypot(a[0] - b[0], a[2] - b[2]));
             }
         }
         return worst;

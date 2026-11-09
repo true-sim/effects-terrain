@@ -112,3 +112,36 @@ normals, which would turn a normal-like tangent into a near-zero vector.
 
 **Rule.** Data for the material goes in the colour or the UV sets, never the tangent, on anything that may be
 deformed.
+
+## A heightfield holds no beds on a near-vertical wall, however fine its tiles
+
+**What happened.** The cliff relief first went into the surface's height only (`CliffParameters.Relief.HEIGHT`): beds
+as terraces, the face shifted by reading the data up or down its slope. On Lauterbrunnen's Staubbach wall, rendered
+plain (no textures, no detail normal), the wall showed buttresses and joints but not one bed, on 0.5 m tiles and on
+0.125 m tiles alike: a grid has a vertex only every footprint times the slope's rise up a wall (at 84 degrees, 0.5 m
+of grid is 5 m of wall), so a bed of 9 m gets two vertices. Tiles of 16 m with 128 quads (0.125 m) asked for 3,838
+tiles of 33,000 triangles in that one view and did not settle in two minutes.
+
+**Rule.** Detail up a wall needs vertices up the wall: the relief goes into the mesh (`Relief.MESH`, `CliffMesh`:
+steep edges cut every step up the wall, vertices moved horizontally), the heightfield's relief kept for slopes.
+
+## Halving steep edges recursively grows as a power of the wall's height
+
+**What happened.** `CliffMesh` first refined by longest-edge bisection in rounds (each triangle split by the edges it
+had halved). A triangle with two steep edges becomes three each round, each again with two steep edges: after
+log2(H / step) rounds, 3^log2(H / step) = (H / step)^1.58 triangles instead of H / step. One 128 m tile of the
+Staubbach wall hit the cap of 150,000 vertices (a timing run of `TileMeshes.build` on the real site); cut edges with a
+zipper between the triangle's edge rising most and the other two: 24,476 vertices, 151 ms.
+
+**Rule.** Refine a heightfield's wall by cutting edges by their rise and zipping rows between them, not by recursive
+halving.
+
+## A feature that fades a little more at each level never splits a tile by the next level's error
+
+**What happened.** A tile's error is measured against the next finer level. The cliffs' relief fades with each level
+(beds by the vertices' spacing up the wall, joints by the grid's), each level only a little more than the one below:
+`CliffGpuTest`'s wall view showed no refined tile at all (levels shown 4, 3, 3, 11, 13, 14 from the finest), the
+wall drawn by tiles of 256 m.
+
+**Rule.** The relief's error is measured against the finest level's relief (`TerrainError.tile` with the cliff
+settings): the same view then shows 7 refined tiles, the levels 4, 15, 8, 9, 13, 14.

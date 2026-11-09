@@ -15,7 +15,7 @@ goes through the scene.
 
 ```kotlin
 dependencies {
-    implementation("com.truesim.effects:effects-terrain:0.4.0") // with engine-scene 0.198, scene 0.70
+    implementation("com.truesim.effects:effects-terrain:0.6.0") // with engine-scene 0.200, scene 0.70
 }
 ```
 
@@ -125,6 +125,70 @@ way the engine shades runs it (forward, the visibility buffer, ray and probe hit
 effects-weather's snow (`weather.snow`) covers it (tested; over steep terrain its occlusion map wants a bias of a
 texel's rise, `weather.snow.bias` 3 m at 1.6 m texels), effects-atmosphere's aerial perspective fogs it.
 
+## Cliffs
+
+Lauterbrunnen's walls are 300 to 500 m of limestone, near vertical. Elevation data 2 m apart holds them as smooth
+curtains: a heightfield's grid has a vertex only every footprint times the slope's rise up a wall (20 m for 2 m tiles
+on an 84-degree face), its bilinear samples leave creases that run down the face as streaks, and a texture projected
+from above stretches down it. The cliffs get a material layer of their own and relief the data cannot hold.
+
+**The material: a cliff layer.** Rock's share past `cliffSlopeStart` (50 degrees) is the walls' limestone, all of it
+from `cliffSlopeEnd` (60) (`TerrainLayers.cliff`, the CPU twin, tested against the shader): a texture set of its own
+(`TerrainMaterial.data(..., cover, cliff)`, a Poly Haven set plugs in as any layer's) times `cliffColor` (0.40, the
+limestone's 0.35 to 0.45), `cliffSaturation` (0: grey; warm scans greyed to limestone), roughness `cliffRough` (0.85,
+a texture's varying round it), projected three ways with `cliffSharpness`; then
+
+- a **world-space detail normal**: bedding planes near horizontal (`beddingThickness` 1.3 m, every fourth stronger,
+  dipping `beddingDip` towards `beddingAzimuth`, waving by `beddingWaviness`) and two sets of vertical joints
+  (`jointSpacing`, `jointStrength`), its gradient by differences in world space (no projection to streak), each
+  faded out where a pixel cannot hold it;
+- **macro variation down the faces**: dark water streaks, long down the face and narrow across it (`streaks`); darker
+  bands under the beds' ledges, dipping as the bedding (`bands`, `bandSpacing`, readable from afar); lighter, warmer
+  fresh rockfall scars (`scars`); lichen patches (`lichen`, `lichenColor`), more where the wall is less steep; wet
+  darkening and gloss at the walls' foot, where the ground turns concave (`wetFoot`).
+
+**The geometry: relief on the walls** (`CliffParameters`, `terrain.cliffs.*`), only where the data's slope passes
+`terrain.cliffs.slopeStart` (55 degrees, all of it from 60), every feature a horizontal shift of the wall, out of it
+or into it:
+
+- **smoothing**: on the walls the data is averaged over `smoothing` (2 m: a box over its bilinear samples, a quadratic
+  B-spline), so its samples leave no creases;
+- **bedding**: beds `bedThickness` (9 m) thick, varying by `bedVariation`, dipping `dip` towards `dipAzimuth`, waving
+  by `waviness`; each bed's soft foot weathered back `ledge` metres under the hard bed above (an overhang, its
+  underside facing down, the bed below ending in a ledge), its depth and thickness each bed's own (some beds none),
+  deepening and fading along the wall, each hard bed leaning back a little as it rises;
+- **joints**: two vertical sets at right angles (`jointAzimuth`), about `jointSpacing` apart, clefts `jointWidth` wide
+  and `jointDepth` deep, some missing;
+- **buttresses**: ribs and bays `buttressDepth` out and in, about `buttressLength` apart along the wall.
+
+Where the relief goes (`terrain.cliffs.geometry`), both kept, since each wins somewhere:
+
+| | `MESH` (default) | `HEIGHT` |
+|---|---|---|
+| How | the tiles' steep triangles refined, every vertex on a wall moved horizontally (`CliffMesh`) | the face shifted by reading the data a little up or down its slope (the heightfield stays a heightfield) |
+| Ledges and overhangs | at any steepness: vertices every `step` up the walls (0.4 m at level 0, twice that each level up, `terrain.cliffs.levels` refined), true overhangs | only where the grid has vertices enough up the wall (slopes, not walls); a heightfield holds no overhang |
+| CPU queries | the heightfield's (the data, smoothed on the walls): within the relief's few metres of the drawn wall | exact |
+| Cost | vertices: see below | none beyond finer tiles |
+
+**Refining** (`MESH`): each grid edge on a cliff is cut into as many even pieces as it rises steps
+(`terrain.cliffs.step`), its points sampled from the surface; a triangle with cut edges is triangulated between its
+edge that rises most and the other two (they rise as much together) by a zipper up both sides, each new triangle a row
+of the wall, so a wall of H metres takes about 2 H / step triangles a grid triangle (halving edges recursively instead
+grew as (H / step)^1.6: a 128 m tile filled 150,000 vertices). How an edge is cut depends on its two ends alone and its
+points on where they lie, so two triangles sharing an edge, in a tile or in neighbouring tiles of a level, cut it alike
+(tested: neighbours meet vertex for vertex, moved alike; the mesh conforming, one winding). The skirts hang from every
+vertex of a border, refined ones too (tested: each tile's skirt foot lies below its coarser neighbour's border and the
+other way round; on the GPU no background shows through a refined wall where levels meet, both shading paths). A
+tile's normals are the moved wall's, from the shift's change up and along the wall (smooth across tiles: a function
+of the point). Morph targets move wall vertices onto the coarser level's wall. A tile's error counts how far its
+relief lies from the finest level's (`TerrainError.tile`), so walls split where their relief would show coarse.
+`terrain.cliffs.maxVertices` caps a tile.
+
+**Shadows.** The relief is in the tiles' meshes, so the shadow maps draw it and ray tracing's bottom levels hold it:
+under a sun grazing a wall its overhangs and joints shadow the wall below them, by the cascades (which pancake the
+casters towards the sun) and by rays alike (`CliffGpuTest`: the shadows darken 1,474 and 1,321 pixels of a 192 x 128
+view of the relief, none of the flat wall).
+
 ## Modifiers: beds, roads, squares and the materials they lay
 
 What other libraries change in the terrain comes in as **terrain modifiers** (`TerrainModifier`, in
@@ -215,9 +279,14 @@ the morphing tiles).
 
 ## Settings
 
-`TerrainSettings` (group `terrain`): `tileSize`, `tileQuads`, `levels`, `detail.*` and `curvature` (read when a
-`Terrain` is made), `screenError`, `errorSamples`, `errorScale`, `range`, `buildBudget`, `skirts`, `skirtMargin`,
-`curvatureScale`.
+`TerrainSettings` (group `terrain`): `tileSize`, `tileQuads`, `levels`, `detail.*`, `curvature` and `cliffs.*` (read
+when a `Terrain` is made), `screenError`, `errorSamples`, `errorScale`, `range`, `buildBudget`, `skirts`, `skirtMargin`,
+`curvatureScale`. The cliffs: `cliffs.relief` (on), `cliffs.geometry` (`MESH` or `HEIGHT`), `cliffs.step`,
+`cliffs.levels`, `cliffs.rounds`, `cliffs.maxVertices`, `cliffs.slopeStart`, `cliffs.slopeEnd`, `cliffs.smoothing`,
+`cliffs.bedThickness`, `cliffs.bedVariation`, `cliffs.ledge`, `cliffs.dip`, `cliffs.dipAzimuth`, `cliffs.waviness`,
+`cliffs.wavinessLength`, `cliffs.jointSpacing`, `cliffs.jointWidth`, `cliffs.jointDepth`, `cliffs.jointAzimuth`,
+`cliffs.buttressDepth`, `cliffs.buttressLength`; the material's cliff layer is in its parameters (`cliff*`,
+`bedding*`, `joint*`, `streaks`, `bands`, `scars`, `lichen`, `wetFoot`).
 
 ## Building
 
@@ -229,6 +298,7 @@ Sibling checkouts of `build-logic`, `common-*`, `scene`, `engine`, `effects-atmo
 as included builds when present (`-Ptruesim.<repo>=false` to use the published packages instead). The GPU tests run on
 any Vulkan 1.3 device (CI: Mesa's lavapipe), validated; tests of the real site run where `fetchTerrain` has filled the
 cache and are skipped elsewhere. Films: `TRUESIM_SCREENSHOTS=true ./gradlew :effects-terrain:test --tests
-'*TerrainFilms*' -Pscreenshots=<dir>`.
+'*TerrainFilms*' -Pscreenshots=<dir>`; the cliffs' (`*CliffFilms*`) take Poly Haven's sets from `~/.truesim/polyhaven`
+(`-Ptruesim.polyhaven=<dir>`) where the showcase fetched them.
 
 MIT; the elevation data keeps its own licences (`CREDITS.md`).

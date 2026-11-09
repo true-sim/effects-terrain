@@ -78,6 +78,24 @@ public final class TerrainMaterial {
         return builder.build();
     }
 
+    /**
+     * The material data of {@code rules} with the four layers' texture sets, the modifiers' surface materials
+     * ({@code cover}) and the cliffs' texture set ({@code cliff}: the walls' limestone past the rules'
+     * {@code cliffSlopeStart}, projected three ways; {@link Layer#PLAIN} for its color alone, with the shader's detail
+     * and macro variation either way). A Poly Haven set plugs in as any layer's: albedo, {@code nor_gl}, the ORM.
+     */
+    @AllowAllocation("material data, made rarely")
+    public static MaterialData data(TerrainParameters rules, Layer rock, Layer grass, Layer scree, Layer snow,
+        Cover cover, Layer cliff) {
+        MaterialData.Builder builder = builder(rules, rock, grass, scree, snow);
+        layer(builder, "gravel", cover.gravel());
+        layer(builder, "cobbles", cover.cobbles());
+        layer(builder, "dirt", cover.dirt());
+        layer(builder, "sand", cover.sand());
+        layer(builder, "cliff", cliff);
+        return builder.build();
+    }
+
     /** The material data of the rules and colors of {@code rules} with the four layers' texture sets. */
     @AllowAllocation("material data, made rarely")
     public static MaterialData data(TerrainParameters rules, Layer rock, Layer grass, Layer scree, Layer snow) {

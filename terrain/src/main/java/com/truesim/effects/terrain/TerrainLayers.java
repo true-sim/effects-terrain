@@ -44,6 +44,15 @@ public final class TerrainLayers {
         weights[SNOW] = snow;
     }
 
+    /**
+     * How much of a point's rock is cliff (the walls' limestone, terrain.slang's {@code cliffShare}) at {@code slope}
+     * degrees: 0 below the rules' {@code cliffSlopeStart}, 1 from {@code cliffSlopeEnd}; the cliff's weight is rock's
+     * weight times this.
+     */
+    public static double cliff(TerrainParameters p, double slope) {
+        return smoothstep(p.cliffSlopeStart(), Math.max(p.cliffSlopeEnd(), p.cliffSlopeStart() + 0.01), slope);
+    }
+
     /** GLSL's smoothstep: 0 below {@code edge0}, 1 above {@code edge1}, Hermite between. */
     static double smoothstep(double edge0, double edge1, double x) {
         double t = Math.clamp((x - edge0) / (edge1 - edge0), 0, 1);

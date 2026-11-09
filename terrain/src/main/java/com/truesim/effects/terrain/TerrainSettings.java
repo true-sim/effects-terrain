@@ -1,5 +1,6 @@
 package com.truesim.effects.terrain;
 
+import com.truesim.effects.terrain.data.CliffParameters;
 import com.truesim.effects.terrain.data.SurfaceParameters;
 import com.truesim.engine.settings.EngineSettings;
 import com.truesim.engine.settings.Setting;
@@ -77,10 +78,88 @@ public final class TerrainSettings {
     public static final Setting<Float> CURVATURE_SCALE = Setting.decimal("terrain.curvatureScale", 0.05f, 0.0001f,
         100, "terrain curvature (1/m) that counts as fully concave or convex for the material");
 
+    /**
+     * Whether cliffs get the relief the data cannot hold ({@link CliffParameters}: bedding ledges, joints, buttresses).
+     * It shows as far as the tiles' spacing allows: ledges and joints need the finest tiles at 0.5 m or finer
+     * ({@code terrain.tileSize} 32 with 64 quads), buttresses show at every spacing.
+     */
+    public static final Setting<Boolean> CLIFFS = Setting.bool("terrain.cliffs.relief", true,
+        "whether cliffs get bedding ledges, joints and buttresses below the data's resolution");
+    /**
+     * Where the cliff relief goes ({@link CliffParameters.Relief}): {@code MESH} (default), steep triangles refined and
+     * vertices moved out of the walls and into them (ledges and overhangs at any steepness); {@code HEIGHT}, into the
+     * heightfield (no extra vertices, the CPU queries exact, beds only where the grid holds them: slopes, not walls).
+     */
+    public static final Setting<CliffParameters.Relief> CLIFF_RELIEF = Setting.choice("terrain.cliffs.geometry",
+        CliffParameters.Relief.MESH, "where the terrain's cliff relief goes: refined meshes (MESH) or the heightfield (HEIGHT)");
+    /** How far up a wall the finest refined meshes' edges may rise, metres, each coarser level's twice ({@code MESH}). */
+    public static final Setting<Float> CLIFF_STEP = Setting.decimal("terrain.cliffs.step", 0.4f, 0.05f, 100,
+        "metres a refined cliff mesh's edge may rise at most (MESH)");
+    /** How many of the finest levels refine their cliffs ({@code MESH}); coarser tiles keep their grid. */
+    public static final Setting<Integer> CLIFF_LEVELS = Setting.integer("terrain.cliffs.levels", 3, 0, 16,
+        "how many of the finest terrain levels refine their cliffs' meshes (MESH)");
+    /** How many times an edge may be halved ({@code MESH}). */
+    public static final Setting<Integer> CLIFF_ROUNDS = Setting.integer("terrain.cliffs.rounds", 9, 0, 16,
+        "a cliff mesh edge is cut into at most 2 to this power pieces (MESH)");
+    /** The most vertices a tile's refined mesh may have ({@code MESH}): refining stops at it. */
+    public static final Setting<Integer> CLIFF_VERTICES = Setting.integer("terrain.cliffs.maxVertices", 150_000, 1000,
+        4_000_000, "most vertices a terrain tile's refined cliff mesh may have (MESH)");
+    /** The slope the cliff relief starts at, degrees. */
+    public static final Setting<Float> CLIFF_SLOPE_START = Setting.decimal("terrain.cliffs.slopeStart", 55, 0, 89,
+        "slope where the terrain's cliff relief starts, degrees");
+    /** The slope the cliff relief is whole at, degrees. */
+    public static final Setting<Float> CLIFF_SLOPE_END = Setting.decimal("terrain.cliffs.slopeEnd", 60, 1, 90,
+        "slope where the terrain's cliff relief is whole, degrees");
+    /** The width the data is averaged over on the walls, metres: no creases at its samples (streaks down a wall). */
+    public static final Setting<Float> CLIFF_SMOOTHING = Setting.decimal("terrain.cliffs.smoothing", 2, 0, 100,
+        "width the elevation data is averaged over on cliffs, metres (removes the creases its samples leave)");
+    /** The cliffs' beds' thickness, metres. */
+    public static final Setting<Float> CLIFF_BED = Setting.decimal("terrain.cliffs.bedThickness", 9, 0.5f, 200,
+        "thickness of the beds of the terrain's cliffs, metres");
+    /** How much the beds' thickness varies, 0 to 1. */
+    public static final Setting<Float> CLIFF_BED_VARIATION = Setting.decimal("terrain.cliffs.bedVariation", 0.45f, 0,
+        1, "how much the thickness of the cliffs' beds varies, 0 to 1");
+    /** The width of the ledges on the beds' tops, metres. */
+    public static final Setting<Float> CLIFF_LEDGE = Setting.decimal("terrain.cliffs.ledge", 1.5f, 0, 50,
+        "width of the ledges on the cliffs' beds, metres (0: no bedding)");
+    /** The beds' dip, degrees. */
+    public static final Setting<Float> CLIFF_DIP = Setting.decimal("terrain.cliffs.dip", 4, -44, 44,
+        "dip of the cliffs' beds, degrees");
+    /** The direction the beds dip to, degrees clockwise from north. */
+    public static final Setting<Float> CLIFF_DIP_AZIMUTH = Setting.decimal("terrain.cliffs.dipAzimuth", 150, -360, 360,
+        "direction the cliffs' beds dip towards, degrees clockwise from north");
+    /** How far the beds wave up and down, metres. */
+    public static final Setting<Float> CLIFF_WAVINESS = Setting.decimal("terrain.cliffs.waviness", 2.5f, 0, 100,
+        "how far the cliffs' beds wave up and down, metres");
+    /** Over what length the beds wave, metres. */
+    public static final Setting<Float> CLIFF_WAVINESS_LENGTH = Setting.decimal("terrain.cliffs.wavinessLength", 140, 1,
+        10_000, "length over which the cliffs' beds wave, metres");
+    /** The joints' spacing, metres. */
+    public static final Setting<Float> CLIFF_JOINT_SPACING = Setting.decimal("terrain.cliffs.jointSpacing", 24, 1,
+        1000, "spacing of the vertical joints in the terrain's cliffs, metres");
+    /** The joints' width, metres. */
+    public static final Setting<Float> CLIFF_JOINT_WIDTH = Setting.decimal("terrain.cliffs.jointWidth", 2.5f, 0.1f,
+        100, "width of the joints in the terrain's cliffs, metres");
+    /** The joints' depth, metres. */
+    public static final Setting<Float> CLIFF_JOINT_DEPTH = Setting.decimal("terrain.cliffs.jointDepth", 2f, 0, 50,
+        "depth of the joints in the terrain's cliffs, metres (0: none)");
+    /** The first joint set's strike, degrees clockwise from north. */
+    public static final Setting<Float> CLIFF_JOINT_AZIMUTH = Setting.decimal("terrain.cliffs.jointAzimuth", 25, -360,
+        360, "strike of the first set of joints in the terrain's cliffs, degrees clockwise from north");
+    /** How far the cliffs' ribs stand out and bays go in, metres. */
+    public static final Setting<Float> CLIFF_BUTTRESS_DEPTH = Setting.decimal("terrain.cliffs.buttressDepth", 4, 0,
+        100, "how far the cliffs' buttresses stand out and bays go in, metres (0: none)");
+    /** The buttresses' spacing along the wall, metres. */
+    public static final Setting<Float> CLIFF_BUTTRESS_LENGTH = Setting.decimal("terrain.cliffs.buttressLength", 90, 4,
+        10_000, "spacing of the buttresses along the terrain's cliffs, metres");
+
     /** Every terrain setting. */
     public static final List<Setting<?>> ALL = List.of(TILE_SIZE, TILE_QUADS, LEVELS, SCREEN_ERROR, ERROR_SAMPLES, ERROR_SCALE,
         RANGE, FOLLOW_STEP, MORPH_SECONDS, LAYER_SCALE, BUILD_BUDGET, SKIRTS, SKIRT_MARGIN, DETAIL_AMPLITUDE, DETAIL_WAVELENGTH, DETAIL_OCTAVES,
-        DETAIL_EROSION, CURVATURE, CURVATURE_SCALE);
+        DETAIL_EROSION, CURVATURE, CURVATURE_SCALE, CLIFFS, CLIFF_RELIEF, CLIFF_STEP, CLIFF_LEVELS, CLIFF_ROUNDS, CLIFF_VERTICES, CLIFF_SLOPE_START, CLIFF_SLOPE_END, CLIFF_SMOOTHING, CLIFF_BED,
+        CLIFF_BED_VARIATION, CLIFF_LEDGE, CLIFF_DIP, CLIFF_DIP_AZIMUTH, CLIFF_WAVINESS, CLIFF_WAVINESS_LENGTH,
+        CLIFF_JOINT_SPACING, CLIFF_JOINT_WIDTH, CLIFF_JOINT_DEPTH, CLIFF_JOINT_AZIMUTH, CLIFF_BUTTRESS_DEPTH,
+        CLIFF_BUTTRESS_LENGTH);
 
     private TerrainSettings() {
     }
@@ -88,6 +167,20 @@ public final class TerrainSettings {
     /** The surface's procedural detail and curvature as {@code settings} say. */
     public static SurfaceParameters surface(EngineSettings settings) {
         return new SurfaceParameters(settings.get(DETAIL_AMPLITUDE), settings.get(DETAIL_WAVELENGTH),
-            settings.get(DETAIL_OCTAVES), settings.get(DETAIL_EROSION), settings.get(CURVATURE));
+            settings.get(DETAIL_OCTAVES), settings.get(DETAIL_EROSION), settings.get(CURVATURE), cliffs(settings));
+    }
+
+    /** The cliff relief as {@code settings} say ({@link CliffParameters#NONE} with it off). */
+    public static CliffParameters cliffs(EngineSettings settings) {
+        if (!settings.get(CLIFFS)) {
+            return CliffParameters.NONE;
+        }
+        float start = settings.get(CLIFF_SLOPE_START);
+        return new CliffParameters(start, Math.max(settings.get(CLIFF_SLOPE_END), start + 0.5),
+            settings.get(CLIFF_SMOOTHING), settings.get(CLIFF_BED), settings.get(CLIFF_BED_VARIATION), settings.get(CLIFF_LEDGE),
+            settings.get(CLIFF_DIP), settings.get(CLIFF_DIP_AZIMUTH), settings.get(CLIFF_WAVINESS),
+            settings.get(CLIFF_WAVINESS_LENGTH), settings.get(CLIFF_JOINT_SPACING), settings.get(CLIFF_JOINT_WIDTH),
+            settings.get(CLIFF_JOINT_DEPTH), settings.get(CLIFF_JOINT_AZIMUTH), settings.get(CLIFF_BUTTRESS_DEPTH),
+            settings.get(CLIFF_BUTTRESS_LENGTH), settings.get(CLIFF_RELIEF));
     }
 }
