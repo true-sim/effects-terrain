@@ -71,6 +71,10 @@ public final class CliffMesh {
         double[] pz;
         /** How much of a cliff each is (0: not moved). */
         double[] weight;
+        /** Where refining put each up its edge: the height between the edge's ends it was cut at (NaN: a grid vertex). */
+        double[] cut;
+        /** Each vertex's bedding-plane height once worked out (NaN before). */
+        double[] bed;
 
         Vertices(int capacity) {
             positions = new float[3 * capacity];
@@ -82,6 +86,10 @@ public final class CliffMesh {
             px = new double[capacity];
             pz = new double[capacity];
             weight = new double[capacity];
+            cut = new double[capacity];
+            Arrays.fill(cut, Double.NaN);
+            bed = new double[capacity];
+            Arrays.fill(bed, Double.NaN);
         }
 
         void ensure(int capacity) {
@@ -98,6 +106,11 @@ public final class CliffMesh {
             px = Arrays.copyOf(px, c);
             pz = Arrays.copyOf(pz, c);
             weight = Arrays.copyOf(weight, c);
+            int old = cut.length;
+            cut = Arrays.copyOf(cut, c);
+            Arrays.fill(cut, old, c, Double.NaN);
+            bed = Arrays.copyOf(bed, c);
+            Arrays.fill(bed, old, c, Double.NaN);
         }
     }
 
@@ -206,20 +219,26 @@ public final class CliffMesh {
             System.arraycopy(first, 0, chain, 0, first.length);
             System.arraycopy(second, 1, chain, first.length, second.length - 1);
             // how far up from p to q each point is, by the ends' heights (the cuts are even)
-            double hp = height(p);
-            double hq = height(q);
-            double ha = height(apex);
+            double hp = bed(p);
+            double hq = bed(q);
+            double ha = bed(apex);
             double span = hq - hp;
             double apexAt = Math.abs(span) > 1e-9 ? Math.clamp((ha - hp) / span, 0, 1) : 0.5;
+            // by the heights the cuts were made at (the edges are cut at the same altitudes, so the rows zip level)
+            double run = 0;
             for (int i = 0; i < a.length; i++) {
-                progressA[i] = (double) i / (a.length - 1);
+                run = Math.max(run, progress(a[i], hp, span, (double) i / (a.length - 1)));
+                progressA[i] = run;
             }
-            for (int j = 0; j < first.length; j++) {
-                progressB[j] = apexAt * j / (first.length - 1);
+            run = 0;
+            for (int j = 0; j < nb; j++) {
+                double even = j < first.length ? apexAt * j / (first.length - 1)
+                    : apexAt + (1 - apexAt) * (j - first.length + 1) / (second.length - 1);
+                run = Math.max(run, progress(chain[j], hp, span, even));
+                progressB[j] = run;
             }
-            for (int j = 1; j < second.length; j++) {
-                progressB[first.length - 1 + j] = apexAt + (1 - apexAt) * j / (second.length - 1);
-            }
+            progressA[a.length - 1] = 1;
+            progressB[nb - 1] = 1;
             double orientation = cross(v0, v1, v2);
             int i = 0;
             int j = 0;
@@ -253,6 +272,74 @@ public final class CliffMesh {
             }
         }
         return Arrays.copyOf(out, t);
+    }
+
+    /**
+     * Where along edge ({@code lo}, {@code hi}) (heights {@code h0}, {@code h1}) the surface crosses {@code level}:
+     * the fraction from {@code lo}, at least {@code from}; by bisection between the linear guess's bracket, else the
+     * linear guess.
+     */
+    private double crossing(int lo, int hi, double h0, double h1, double level, double from) {
+        // regula falsi (Illinois) from the bracket [from, 1], two steps: the surface is near linear along an edge
+        double a = from;
+        double b = 1;
+        double ga = (from > 0 ? heightAlong(lo, hi, a) : h0) - level;
+        double gb = h1 - level;
+        if (ga * gb > 0) {
+            return Math.clamp((level - h0) / (h1 - h0), from, 1);
+        }
+        double f = a;
+        int side = 0;
+        for (int i = 0; i < 2; i++) {
+            f = (a * gb - b * ga) / (gb - ga);
+            double g = heightAlong(lo, hi, f) - level;
+            if (g * gb > 0) {
+                b = f;
+                gb = g;
+                if (side == -1) {
+                    ga *= 0.5;
+                }
+                side = -1;
+            } else {
+                a = f;
+                ga = g;
+                if (side == 1) {
+                    gb *= 0.5;
+                }
+                side = 1;
+            }
+        }
+        return f;
+    }
+
+    /** The surface's bedding-plane height {@code f} of the way along edge ({@code lo}, {@code hi}). */
+    private double heightAlong(int lo, int hi, double f) {
+        if (f <= 0) {
+            return bed(lo);
+        }
+        if (f >= 1) {
+            return bed(hi);
+        }
+        double x = x0 + verts.px[lo] + (verts.px[hi] - verts.px[lo]) * f;
+        double z = z0 + verts.pz[lo] + (verts.pz[hi] - verts.pz[lo]) * f;
+        return surface.bedHeight(x, z, surface.altitude(x, z, spacing));
+    }
+
+    /** Vertex {@code v}'s bedding-plane height: the plane it was cut on, or its own (kept once worked out). */
+    private double bed(int v) {
+        if (Double.isNaN(verts.cut[v])) {
+            double x = x0 + verts.px[v];
+            double z = z0 + verts.pz[v];
+            verts.bed[v] = Double.isNaN(verts.bed[v]) ? surface.bedHeight(x, z, height(v) + surface.fall(x, z))
+                : verts.bed[v];
+            return verts.bed[v];
+        }
+        return verts.cut[v];
+    }
+
+    /** How far up from {@code hp} over {@code span} vertex {@code v} was cut ({@code fallback} where unknown). */
+    private double progress(int v, double hp, double span, double fallback) {
+        return Math.abs(span) > 1e-9 ? Math.clamp((bed(v) - hp) / span, 0, 1) : fallback;
     }
 
     private double height(int v) {
@@ -289,18 +376,35 @@ public final class CliffMesh {
             double rise = Math.abs(height(lo) - height(hi));
             double x = 0.5 * (verts.px[lo] + verts.px[hi]);
             double z = 0.5 * (verts.pz[lo] + verts.pz[hi]);
+            // cut where the edge crosses a level of a grid of bedding-plane heights `step` apart (the altitude with the
+            // beds' dip and waviness taken out, TerrainSurface.bedHeight): every edge's cuts lie on the same planes,
+            // so the rows up a wall run along the beds from column to column and sample every bed alike (cut evenly
+            // along each edge, or at levels of the altitude the dipping beds cross, a ledge was sampled in dashes)
+            double h0 = bed(lo);
+            double h1 = bed(hi);
+            int first = 0;
             int pieces = 1;
             if (rise > step && verts.count < settings.maxVertices()
                 && surface.cliffWeight(x0 + x, z0 + z, spacing) > 0) {
-                pieces = (int) Math.min(Math.ceil(rise / step), 1L << Math.min(settings.rounds(), 20));
+                double low = Math.min(h0, h1) + 0.2 * step;
+                double high = Math.max(h0, h1) - 0.2 * step;
+                first = (int) Math.ceil(low / step);
+                int last = (int) Math.floor(high / step);
+                pieces = (int) Math.max(1, Math.min(last - first + 2, 1L << Math.min(settings.rounds(), 20)));
             }
             points = new int[pieces + 1];
             points[0] = lo;
             points[pieces] = hi;
+            double from = 0;
             for (int k = 1; k < pieces; k++) {
-                double f = (double) k / pieces;
+                double level = (h1 > h0 ? first + k - 1 : first + pieces - 1 - k) * step;
+                // where the surface itself crosses the plane (bisection from the last cut on): a row's vertices all
+                // on it, whatever the data does between the edge's ends
+                double f = crossing(lo, hi, h0, h1, level, from);
+                from = f;
                 points[k] = add(lo, hi, f, verts.px[lo] + (verts.px[hi] - verts.px[lo]) * f,
                     verts.pz[lo] + (verts.pz[hi] - verts.pz[lo]) * f);
+                verts.cut[points[k]] = level;
             }
             edges.put(key, points);
         }

@@ -159,7 +159,9 @@ or into it:
 
 - **smoothing**: on the walls the data is averaged over `smoothing` (2 m: a box over its bilinear samples, a quadratic
   B-spline), so its samples leave no creases;
-- **bedding**: beds `bedThickness` (9 m) thick, varying by `bedVariation` (0.6, two octaves along the bed count), dipping `dip` towards `dipAzimuth`, waving
+- **bedding** (its edges never sharper than two and a half rows of the mesh, so every column samples them alike, and
+  a notch too thin for the rows fades out): beds `bedThickness` (9 m) thick, varying by `bedVariation` (0.6, two
+  octaves along the bed count), dipping `dip` towards `dipAzimuth`, waving
   by `waviness`; each bed's soft foot weathered back `ledge` metres under the hard bed above (an overhang, its
   underside facing down, the bed below ending in a ledge), its depth and thickness each bed's own (a third of the
   beds none), each bed deepening and fading along the wall at places of its own, each hard bed leaning back a little
@@ -177,14 +179,17 @@ Where the relief goes (`terrain.cliffs.geometry`), both kept, since each wins so
 | CPU queries | the heightfield's (the data, smoothed on the walls): within the relief's few metres of the drawn wall | exact |
 | Cost | vertices: see below | none beyond finer tiles |
 
-**Refining** (`MESH`): each grid edge on a cliff is cut into as many even pieces as it rises steps
-(`terrain.cliffs.step`), its points sampled from the surface; a triangle with cut edges is triangulated between its
+**Refining** (`MESH`): each grid edge on a cliff is cut where the surface crosses a level of bedding-plane heights
+`terrain.cliffs.step` apart (the altitude with the beds' dip and waviness taken out, `TerrainSurface.bedHeight`;
+found by bisection along the edge), so the rows up a wall run along the beds from column to column and sample every
+bed alike (cut evenly, or at levels of the altitude the dipping beds cross, the ledges were sampled in dashes); a triangle with cut edges is triangulated between its
 edge that rises most and the other two (they rise as much together) by a zipper up both sides, each new triangle a row
 of the wall, so a wall of H metres takes about 2 H / step triangles a grid triangle (halving edges recursively instead
 grew as (H / step)^1.6: a 128 m tile filled 150,000 vertices). How an edge is cut depends on its two ends alone and its
 points on where they lie, so two triangles sharing an edge, in a tile or in neighbouring tiles of a level, cut it alike
 (tested: neighbours meet vertex for vertex, moved alike; the mesh conforming, one winding). The skirts hang from every
-vertex of a border, refined ones too (tested: each tile's skirt foot lies below its coarser neighbour's border and the
+vertex of a border, refined ones too, and on a wall reach into the rock as far as the relief does (each level holds the
+beds its rows can, so neighbouring levels' borders part sideways as well) (tested: each tile's skirt foot lies below its coarser neighbour's border and the
 other way round; on the GPU no background shows through a refined wall where levels meet, both shading paths). A
 tile's normals are the moved wall's, from the shift's change up and along the wall (smooth across tiles: a function
 of the point). Morph targets move wall vertices onto the coarser level's wall. A tile's error counts how far its

@@ -215,15 +215,27 @@ public final class TerrainSurface {
 
     /** Which bed ({@code x}, {@code z}) at {@code altitude} is in, and how far up it: the integer part, the fraction. */
     private static double bedCoordinate(double x, double z, double altitude, CliffParameters c) {
-        double a = Maths.toRadians(c.dipAzimuth());
-        double along = x * Maths.sin(a) - z * Maths.cos(a); // towards the dip
-        double bed = altitude + Maths.tan(Maths.toRadians(c.dip())) * along
-            + c.waviness() * 1.4 * Noise.noise(x / c.wavinessLength(), z / c.wavinessLength(), SEED + 101, null);
-        double q = bed / c.bedThickness();
+        double q = bedHeight(x, z, altitude, c) / c.bedThickness();
         // beds of uneven thickness: two octaves of noise along the bed count (the coordinate still rising with the
         // altitude at the default variation, 0.6: the noise's slope stays under 1 / 0.6 of it)
         return q + c.bedVariation() * (0.9 * Noise.noise(q / 2.3, 0.5, SEED + 102, null)
             + 0.35 * Noise.noise(q / 0.9, 0.5, SEED + 107, null));
+    }
+
+    /**
+     * The height of the bedding plane through ({@code x}, {@code z}) at {@code altitude}, metres: the altitude with the
+     * beds' dip and waviness taken out, the same along a plane. A mesh whose rows run at levels of it samples every bed
+     * alike along a wall ({@code CliffMesh}); rows level in altitude cross the dipping beds and sample them in dashes.
+     */
+    public double bedHeight(double x, double z, double altitude) {
+        return bedHeight(x, z, altitude, parameters.cliffs());
+    }
+
+    private static double bedHeight(double x, double z, double altitude, CliffParameters c) {
+        double a = Maths.toRadians(c.dipAzimuth());
+        double along = x * Maths.sin(a) - z * Maths.cos(a); // towards the dip
+        return altitude + Maths.tan(Maths.toRadians(c.dip())) * along
+            + c.waviness() * 1.4 * Noise.noise(x / c.wavinessLength(), z / c.wavinessLength(), SEED + 101, null);
     }
 
     /**
@@ -332,8 +344,29 @@ public final class TerrainSurface {
             // along the wall each bed fades in and out at places of its own
             double lateral = Math.clamp(0.25 + 1.9 * Noise.noise(x / 45 + bed * 3.7, z / 45 - bed * 2.3, SEED + 106,
                 null), 0, 1);
-            double notch = smooth(0, 0.1, phase) * (1 - smooth(band, band + 0.12, phase)) * depth * lateral;
-            shift += fade * c.ledge() * (0.5 + 0.5 * lean - notch - lean * phase);
+            // the notch's edges at least two and a half vertices' spacing up the wall: every column samples them
+            // alike, the lip continuous (sharper, it falls between rows here and on them there: dashes); a band
+            // the vertices cannot hold fades out
+            // and along the wall the lip's depth and the notch's height wander (a few metres to tens), so a ledge
+            // reads as an irregular lip, not a ruled line
+            double wander = Noise.noise(x / 13 + bed * 1.7, z / 13 - bed * 0.9, SEED + 108, null);
+            band = Math.max(0.08, band + 0.2 * wander);
+            lateral *= Math.clamp(0.7 + 1.4 * Noise.noise(x / 9 - bed * 2.1, z / 9 + bed * 1.3, SEED + 109, null),
+                0, 1);
+            // the lip's underside: from a sharp step to a sloping roof (its shadow thin here, broad there)
+            double roof = 1 + 2.5 * Math.abs(Noise.noise(x / 7 + bed * 0.7, z / 7 + bed * 2.9, SEED + 110, null));
+            double edge = Math.max(0.1, 2.5 * vertical / c.bedThickness()) * roof;
+            double held = Math.clamp((band * roof / edge - 1) / 1.5, 0, 1);
+            double base = Math.max(0.1, 2.5 * vertical / c.bedThickness());
+            double notch = smooth(0, base, phase) * (1 - smooth(band, band + edge, phase)) * depth * lateral * held;
+            // each hard bed leaning back as it rises, then stepping out again to the bed above: the step as smooth as
+            // the notch's edges (a sudden step fell between rows here and on them there), its size wandering along
+            // the wall like the notches'
+            double rise = 1 - base;
+            double saw = phase < rise ? phase / rise : 1 - smooth(rise, 1, phase);
+            double leaning = lean * Math.clamp(0.3 + 1.4 * Noise.noise(x / 11 + bed * 1.1, z / 11 - bed * 1.9,
+                SEED + 111, null), 0, 1);
+            shift += fade * c.ledge() * (0.5 + leaning * (0.5 - saw) - notch);
         }
         fade = fade(c.jointWidth(), footprint);
         if (c.jointDepth() > 0 && fade > 0) {

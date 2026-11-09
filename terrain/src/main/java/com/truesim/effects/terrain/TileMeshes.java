@@ -268,6 +268,7 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
         System.arraycopy(triangles, 0, indices, 0, triangles.length);
         t = triangles.length;
         int[] skirtSource = new int[skirtCount];
+        double reach = cliffs.ledge() + cliffs.jointDepth() + 1.5 * cliffs.buttressDepth();
         int skirt = top;
         for (int side = 0; skirts && side < 4; side++) {
             int[] edge = sides[side];
@@ -278,6 +279,19 @@ public final class TileMeshes implements Generator<TileMeshes.TileMesh, MeshData
                 positions[3 * v] = positions[3 * from];
                 positions[3 * v + 1] = (float) (positions[3 * from + 1] - depth);
                 positions[3 * v + 2] = positions[3 * from + 2];
+                if (meshRelief && verts.weight[from] > 0) {
+                    // on a wall the relief moves the borders of neighbouring levels apart sideways (each level holds
+                    // the beds its rows can): the skirt reaches into the rock as far as the relief does, so it closes
+                    // that slit too, seen from outside the wall
+                    double nx = normals[3 * from];
+                    double nz = normals[3 * from + 2];
+                    double l = Math.sqrt(nx * nx + nz * nz);
+                    if (l > 0.2) {
+                        double in = reach * verts.weight[from] / l;
+                        positions[3 * v] -= (float) (nx * in);
+                        positions[3 * v + 2] -= (float) (nz * in);
+                    }
+                }
                 verts.px[v] = verts.px[from];
                 verts.pz[v] = verts.pz[from];
                 System.arraycopy(normals, 3 * from, normals, 3 * v, 3);

@@ -78,6 +78,22 @@ class CliffMeshTest {
             }
         }
         assertThat(moved).as("vertices the relief moved").isGreaterThan(g.top() / 4);
+        // the rows run along the bedding planes: every cut vertex on its plane (a level of bedding-plane heights a step
+        // apart), so the beds are sampled alike from column to column
+        int cuts = 0;
+        for (int i = 0; i < g.top(); i++) {
+            if (Double.isNaN(v.cut[i])) {
+                continue;
+            }
+            cuts++;
+            double wx = -32 + v.px[i];
+            double wz = v.pz[i];
+            double level = v.cut[i] / step;
+            assertThat(level).as("vertex %d's plane, in steps", i).isCloseTo(Math.rint(level), within(1e-9));
+            double bed = meshes.surface().bedHeight(wx, wz, meshes.surface().altitude(wx, wz, GRID.spacing(0)));
+            assertThat(bed).as("vertex %d on its plane", i).isCloseTo(v.cut[i], within(0.02 * step));
+        }
+        assertThat(cuts).isGreaterThan(g.top() / 2);
         // the wall's vertices flagged for the material by their tangent (y + z below 0), the rest not
         for (int i = 0; i < g.top(); i++) {
             float flag = v.tangents[4 * i + 1] + v.tangents[4 * i + 2];

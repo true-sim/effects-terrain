@@ -153,6 +153,9 @@ class CliffFilms {
         EngineSettings settings = after ? afterSettings() : beforeSettings();
         TerrainFilms.Sky sky = TerrainFilms.Sky.of(gpu, WIDTH, HEIGHT, settings);
         try (TerrainRig rig = sky.rig()) {
+            if (System.getProperty("truesim.cliffs.debug", "").contains("noshadow")) {
+                rig.lights.shadow(0, com.truesim.scene.core.ShadowSpec.NONE);
+            }
             PathAssets paths = new PathAssets(rig.assets);
             TerrainMaterial.Layer[] layers = layers(paths);
             MaterialData material = after ? afterMaterial(layers) : beforeMaterial(layers);

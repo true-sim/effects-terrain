@@ -158,3 +158,17 @@ released crashed; so the sign alone, not the shader reading it. Cause in lavapip
 **Rule.** Data for the material does not go in the tangent's sign; the wall flag is the tangent's direction
 ((0, -0.6, -0.8), y + z below 0). Proof: runs 42653968325 (three attempts), 42661161606 (no flag: green),
 42661168328 (flag, old shader: SIGSEGV).
+
+## Rows cut evenly up a wall sample a dipping ledge in dashes
+
+**What happened.** In the cliffs' close flight (v0.6.1) every ledge read as a row of evenly spaced dark dashes. Not the
+shadows (the same with the sun's shadows off), not the shader's lines (the same with a plain material): the
+geometry's overhang undersides. The rows of a refined wall lay where each grid edge was cut evenly, at heights that
+differ from column to column, and the bed profile (a sharp notch, and a sudden step at each bed's top) is a function
+of the height: a row fell on the notch's edge in one column and beside it in the next. Cut at levels of the altitude,
+the dipping beds (4 degrees) still crossed the rows: downward-facing triangles of a level-1 tile came in clumps along
+the wall with gaps of about 5 m (a scratch histogram of their positions), the dashes' period.
+
+**Rule.** A refined wall's rows run along the bedding planes (edges cut where the surface crosses levels of
+`TerrainSurface.bedHeight`, found by bisection), and nothing in the relief is sharper than two and a half rows. Proof:
+`CliffMeshTest` (every cut vertex on its plane); the stills before and after (`CliffFilms`, plain and shadowless).
