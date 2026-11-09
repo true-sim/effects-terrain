@@ -184,6 +184,28 @@ of the point). Morph targets move wall vertices onto the coarser level's wall. A
 relief lies from the finest level's (`TerrainError.tile`), so walls split where their relief would show coarse.
 `terrain.cliffs.maxVertices` caps a tile.
 
+**What it costs** (`CliffBenchmark`, `TRUESIM_BENCHMARK=true`; RX 9070 XT, 1920 x 1080, the visibility buffer, the
+sun's four 2048 cascades, the cliff film's two views at their middle, each configuration in a JVM of its own, medians
+of 120 frames after 80; 2026-11-09, other agents' renders sharing the GPU, so the frames are noisy: two of them, rerun,
+dropped from 6.7 and 13-14 ms to the figures here):
+
+| Configuration | Valley floor: GPU frame, tiles (refined), vertices | Staubbach wall | Settled in |
+|---|---|---|---|
+| before: 128 m tiles, no relief | 1.21-1.26 ms, 1,929, 8.2 M | 1.41 ms, 2,010, 8.5 M | 8-9 s |
+| `HEIGHT`, 32 m tiles (0.5 m) | 1.38-1.41 ms, 3,780, 16.0 M | 1.54 ms, 3,711, 15.7 M | 17-19 s |
+| `MESH`, 32 m tiles (0.5 m) | 1.86-2.15 ms, 2,508 (687), 21.1 M | 1.69 ms, 2,535 (679), 20.9 M | 31-43 s |
+| `MESH`, the default 128 m tiles | 1.53 ms, 1,875 (609), 24.6 M | 1.66 ms, 1,917 (612), 24.2 M | 27-35 s |
+
+The meshlet IDs pass carries most of the difference (0.27 ms before, 0.41 `HEIGHT`, 0.55-0.72 `MESH`); shading
+changes little (0.51-0.71 ms: the cliff layer's detail normal and macro variation are a few value-noise lookups). One
+tile on the Staubbach wall builds on the CPU in 2-35 ms before (by level), 3-35 ms `HEIGHT`, and 187 ms (32 m, 41,585
+vertices), 219 ms (64 m, 36,153), 160 ms (128 m, 24,476), 60 ms (256 m, unrefined: its error against the finest
+relief) `MESH`: the views settle three to four times slower, on the asset lanes, not the frame. With the sun ray
+traced the bottom levels hold every vertex: 1,065 MiB before (staubbach view, traced shadows 0.30 ms, frame 1.69 ms);
+`MESH` on 32 m tiles would need about 2.5 times that (by its vertices) and did not fit beside another process's 7 GiB
+on the 16 GiB card (`VK_ERROR_OUT_OF_DEVICE_MEMORY`), so where rays shadow the terrain keep `terrain.cliffs.levels`
+low or `terrain.cliffs.step` coarse, or the relief in `HEIGHT`.
+
 **Shadows.** The relief is in the tiles' meshes, so the shadow maps draw it and ray tracing's bottom levels hold it:
 under a sun grazing a wall its overhangs and joints shadow the wall below them, by the cascades (which pancake the
 casters towards the sun) and by rays alike (`CliffGpuTest`: the shadows darken 1,474 and 1,321 pixels of a 192 x 128

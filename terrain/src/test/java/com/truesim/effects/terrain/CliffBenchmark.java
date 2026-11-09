@@ -124,13 +124,21 @@ class CliffBenchmark {
     @Test
     void views() throws Exception {
         assumeThat(TestSites.lauterbrunnen()).as("the Lauterbrunnen site imported into the terrain cache").isNotNull();
+        // -Ptruesim.cliffs.bench=<configs, comma-separated>, .rays=false: a part of the runs (each JVM its own)
+        String only = System.getProperty("truesim.cliffs.bench", "");
         for (CliffFilms.Shot shot : CliffFilms.SHOTS) {
             for (Config config : Config.values()) {
-                view(config, shot, false);
+                if (only.isEmpty() || only.contains(config.name())) {
+                    view(config, shot, false);
+                }
             }
         }
-        view(Config.BEFORE, CliffFilms.FLIGHT, true);
-        view(Config.MESH_32, CliffFilms.FLIGHT, true);
+        String rays = System.getProperty("truesim.cliffs.rays", "BEFORE,MESH_32");
+        for (Config config : new Config[] {Config.BEFORE, Config.MESH_32}) {
+            if (rays.contains(config.name())) {
+                view(config, CliffFilms.FLIGHT, true);
+            }
+        }
     }
 
     /** One wall tile's build on the CPU at each level, both modes (median of 5 after 2). */
@@ -146,8 +154,17 @@ class CliffBenchmark {
             TileMeshes meshes = new TileMeshes(surface, grid, 0.25, 0.05).cliffs(CliffMesh.Settings.DEFAULTS);
             for (int level = 0; level < 4; level++) {
                 double size = grid.size(level);
-                // on the Staubbach wall
-                long key = TerrainGrid.key(level, (int) Math.floor(-330 / size), (int) Math.floor(260 / size));
+                // on the Staubbach wall: the tile across it with the most of it
+                long key = TerrainGrid.key(level, (int) Math.floor(-370 / size), (int) Math.floor(250 / size));
+                int most = 0;
+                for (double x = -440; x <= -260; x += Math.min(size, 20)) {
+                    long k = TerrainGrid.key(level, (int) Math.floor(x / size), (int) Math.floor(250 / size));
+                    int v = meshes.geometry(k, -1).top();
+                    if (v > most) {
+                        most = v;
+                        key = k;
+                    }
+                }
                 List<Double> times = new ArrayList<>();
                 int top = 0;
                 for (int k = 0; k < 7; k++) {
