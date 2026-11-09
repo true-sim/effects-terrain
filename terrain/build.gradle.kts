@@ -10,10 +10,10 @@ description = "Terrain for true-sim: heightfield tiles from real elevation data 
 
 dependencies {
     api(project(":effects-terrain-data"))
-    api("com.truesim.engine:engine-scene:0.197.0") // the renderer, the scene bridge, material types
+    api("com.truesim.engine:engine-scene:0.198.0") // the renderer, the scene bridge, material types
     api("com.truesim.scene:scene-world:0.70.0") // multi-level streaming
     api("com.truesim.scene:scene-meshbuild:0.70.0") // tiles into meshlets
-    testImplementation(testFixtures("com.truesim.engine:engine-render:0.197.0")) // the headless renderer
+    testImplementation(testFixtures("com.truesim.engine:engine-render:0.198.0")) // the headless renderer
     testImplementation("com.truesim.effects:atmosphere-render:0.4.0") // the sky of the films
     testImplementation("com.truesim.effects:weather-snow:0.3.0") // snow lying on the terrain
 }
